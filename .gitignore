@@ -1,31 +1,59 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# === Node / Vite / Ionic
+node_modules/
+dist/
+.vite/
+.eslintcache
+coverage/
 
-# dependencies
-/node_modules
-/.pnp
+# PnP (Yarn)
+.pnp
 .pnp.js
 
-# testing
-/coverage
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# production
-/dist
+# === Nx (si aplica)
+.nx/
+.nx/cache/
 
-# misc
-.DS_Store
+# === Entornos (no subir secretos)
+.env
+.env.*
+!.env.example
+# (compatibilidad con lo que ya tenías)
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-/.nx
-/.nx/cache
-/.vscode/*
-!/.vscode/extensions.json
-.idea
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# === Sistema / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 
-# Optional eslint cache
-.eslintcache
+# === Capacitor / Android (sí versionamos android/, NO sus builds/keys)
+android/.gradle/
+android/.idea/
+android/local.properties
+android/**/build/
+android/captures/
+android/app/release/
+android/app/*.keystore
+android/keystore/
+android/release-signing.properties
+*.jks
+
+# === Capacitor / iOS (sí versionamos ios/, NO sus builds)
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/
+ios/App/*.xcuserstate
+ios/App/*.xcuserdata
+ios/App/*.xcworkspace

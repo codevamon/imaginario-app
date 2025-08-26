@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">imaginario</string>
+    <string name="title_activity_main">imaginario</string>
+    <string name="package_name">app.imaginario</string>
+    <string name="custom_url_scheme">app.imaginario</string>
+</resources>
