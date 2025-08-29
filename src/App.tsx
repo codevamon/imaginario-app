@@ -61,6 +61,12 @@ const App: React.FC = () => (
           <Route path="/tab3">
             <Tab3 />
           </Route>
+
+          {/* 👇 NUEVO: si alguien navega a /tabs, redirige a /tab1 */}
+          <Route exact path="/tabs">
+            <Redirect to="/tab1" />
+          </Route>
+
           <Route exact path="/">
             <Redirect to="/tab1" />
           </Route>

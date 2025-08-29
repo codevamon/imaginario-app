@@ -1,4 +1,4 @@
-import { getDb, uid } from './sqlite';
+import { getDb, uid, saveWebStore } from './sqlite';
 
 type Row = Record<string, any>;
 
@@ -49,5 +49,6 @@ export async function createImagDemo() {
     deleted_at: null
   };
   await upsert('imaginarios', row);
+  await saveWebStore();  // 👈 asegura persistencia en web
   return row.id;
 }
