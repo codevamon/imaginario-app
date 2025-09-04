@@ -1,6 +1,6 @@
 // src/core/sync/pull.ts
 import { supabase } from '../supabase';
-import { upsertMany } from '../db/dao.catalog';
+import { upsertMany } from '../db/dao';
 import { getMetaValue, setMetaValue } from '../sqlite';
 
 type Bird = { id:string; name:string; description?:string; rarity?:number; popularity?:number; tags?:string; image_url?:string; updated_at:number; deleted_at?:number|null };

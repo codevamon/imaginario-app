@@ -1,0 +1,13 @@
+.slide-card{
+  position:relative; height:190px; border-radius:16px; background-size:cover; background-position:center;
+  overflow:hidden; display:flex; flex-direction:column; justify-content:space-between;
+}
+.slide-top{ display:flex; justify-content:space-between; padding:10px; }
+.fav-btn ion-icon{ font-size:20px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+.slide-bottom{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px; background:linear-gradient(transparent, rgba(0,0,0,.55));
+}
+.slide-bottom .name{ color:#fff; font-weight:700; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+.slide-bottom .sci{ color:#eaeaea; font-size:12px; }
+.play-btn ion-icon{ font-size:24px; color:#fff; }

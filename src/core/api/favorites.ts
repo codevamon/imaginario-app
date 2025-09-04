@@ -1,7 +1,7 @@
 // src/core/api/favorites.ts
 import { supabase } from '../supabase';
 import { getDeviceId } from '../session/device';
-import { setLocalFavorite } from '../db/dao.catalog';
+import { setLocalFavorite } from '../db/dao';
 
 export async function toggleFavorite(bird_id: string) {
   if (!supabase) throw new Error('Supabase no configurado');

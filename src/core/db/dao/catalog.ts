@@ -1,5 +1,5 @@
-// src/core/db/dao.catalog.ts
-import { getDb } from '../sqlite';
+// src/core/db/dao/catalog.ts
+import { getDb } from '../../sqlite';
 
 type Row = Record<string, any>;
 
