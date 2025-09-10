@@ -21,7 +21,7 @@ import Tab2 from './pages/Tab2';
 import Tab3 from './pages/Tab3';
 import HomePage from './modules/home/HomePage';
 import DiscoverPage from './modules/discover/DiscoverPage';
-import { initDb } from './core/sqlite';
+import { initDb, resetDb, isDbReady } from './core/sqlite';
 
 setupIonicReact();
 
@@ -62,6 +62,14 @@ const App: React.FC = () => {
     const initDatabase = async () => {
       try {
         console.log('[App] 🚀 Inicializando base de datos...');
+        
+        // Verificar si ya está inicializada
+        if (isDbReady()) {
+          console.log('[App] ✅ Base de datos ya está lista');
+          setDbReady(true);
+          return;
+        }
+        
         await initDb();
         setDbReady(true);
         console.log('[App] ✅ Base de datos lista y funcionando correctamente');
@@ -116,7 +124,16 @@ const App: React.FC = () => {
             {dbError}
           </div>
           <button 
-            onClick={() => window.location.reload()}
+            onClick={async () => {
+              setDbError(null);
+              setDbReady(false);
+              try {
+                await resetDb();
+                setDbReady(true);
+              } catch (error) {
+                setDbError((error as Error).message);
+              }
+            }}
             style={{
               padding: '8px 16px',
               backgroundColor: '#007bff',

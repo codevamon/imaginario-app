@@ -15,18 +15,35 @@ export async function upsert(table: string, row: Row, conflictKey = 'id') {
 
 export async function upsertMany(table: string, rows: Row[]) {
   const db = await getDb();
-  await db.execute('BEGIN');
-  try {
-    for (const r of rows) {
-      const cols = Object.keys(r);
+  
+  // Obtener columnas reales de la tabla SQLite una sola vez
+  const colsInDbRes = await db.query(`PRAGMA table_info(${table})`);
+  const validCols = colsInDbRes.values?.map((c: any) => c.name) ?? [];
+  
+  console.log(`[upsertMany] 📋 Tabla ${table}: columnas válidas =`, validCols);
+  
+  for (const r of rows) {
+    try {
+      // Filtrar solo las columnas que existen en SQLite
+      const cols = Object.keys(r).filter(c => validCols.includes(c));
+      
+      if (cols.length === 0) {
+        console.warn('[upsertMany] ⚠️ No hay columnas válidas para la fila', r);
+        continue;
+      }
+      
       const placeholders = cols.map(() => '?').join(',');
       const update = cols.filter(c => c !== 'id').map(c => `${c}=excluded.${c}`).join(',');
       const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})
                    ON CONFLICT(id) DO UPDATE SET ${update};`;
+      
       await db.run(sql, cols.map(c => r[c]));
+    } catch (e) {
+      console.error('[upsertMany] ❌ Error en tabla', table, 'fila=', r, 'error=', e);
     }
-    await db.execute('COMMIT');
-  } catch (e) { await db.execute('ROLLBACK'); throw e; }
+  }
+  
+  console.log(`[upsertMany] ✅ ${rows.length} filas procesadas en tabla ${table}`);
 }
 
 export async function listBirds(limit = 200) {

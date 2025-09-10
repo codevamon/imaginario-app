@@ -1,15 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../core/supabase";
-
-type Bird = {
-  id: string;
-  name: string;
-  description: string | null;
-  rarity: number;
-  popularity: number;
-  tags: string | null;
-  image_url: string | null;
-};
+import type { Bird } from "../core/db/dao/birds";
 
 export default function Tab1() {
   const [birds, setBirds] = useState<Bird[]>([]);

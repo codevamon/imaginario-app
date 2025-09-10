@@ -1,58 +1,79 @@
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonButton, IonIcon, IonSearchbar, IonItem, IonList,
+  IonSpinner, IonToast
 } from '@ionic/react';
-import { filter } from 'ionicons/icons';
+import { filter, refresh } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import BirdSlideCard from './BirdSlideCard';
 import { supabase } from '../../core/supabase';
+import { pullAllTables } from '../../core/sync/pull';
+import { listBirds, getFeaturedBirds, getTopPopular, type Bird } from '../../core/db/dao/birds';
 
 import 'swiper/css';                 // asegúrate de tener "swiper" instalado
 import { Swiper, SwiperSlide } from 'swiper/react';
-
-type Bird = {
-  id: string;
-  name: string;
-  description: string | null;
-  rarity: number;
-  popularity: number;
-  tags: string | null;
-  image_url: string | null;
-  scientific_name?: string | null;
-};
 
 export default function HomePage() {
   const router = useIonRouter();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [featured, setFeatured] = useState<Bird[]>([]);
   const [popular, setPopular] = useState<Bird[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      try {
-        console.log('[HomePage] Cargando datos desde Supabase...');
-        const { data, error } = await supabase
-          .from('birds')
-          .select('*')
-          .order('popularity', { ascending: false });
-        if (error) throw error;
-
-        const all = data || [];
-        setFeatured(all.slice(0, 8));
-        setPopular(all.slice(0, 5));
-        console.log('[HomePage] ✅ Datos cargados desde Supabase');
-      } catch (error) {
-        console.error('[HomePage] ❌ Error cargando datos:', error);
-        // En caso de error, mostrar arrays vacíos en lugar de fallar
-        setFeatured([]);
-        setPopular([]);
-      }
-    })();
+    loadData();
   }, []);
 
   function goDiscover(q?: string) {
     router.push(`/discover${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+  }
+
+  async function handleSync() {
+    if (isSyncing) return;
+    
+    setIsSyncing(true);
+    setSyncMessage('Sincronizando datos...');
+    setShowToast(true); // Solo mostrar toast en sincronización manual
+    
+    try {
+      const result = await pullAllTables();
+      
+      if (result.success) {
+        setSyncMessage(`✅ Sincronización exitosa: ${result.totalRecords} registros actualizados`);
+        // Recargar datos después de la sincronización
+        await loadData();
+      } else {
+        setSyncMessage(`❌ Error en sincronización: ${result.errors.join(', ')}`);
+      }
+    } catch (error) {
+      console.error('[HomePage] Error en sincronización:', error);
+      setSyncMessage(`❌ Error crítico: ${error}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function loadData() {
+    try {
+      console.log('[HomePage] Cargando datos desde SQLite (offline-first)...');
+      
+      // Cargar desde SQLite local (offline-first)
+      const [featuredBirds, popularBirds] = await Promise.all([
+        getFeaturedBirds(8),
+        getTopPopular(5)
+      ]);
+      
+      setFeatured(featuredBirds);
+      setPopular(popularBirds);
+      console.log('[HomePage] ✅ Datos cargados desde SQLite local');
+    } catch (error) {
+      console.error('[HomePage] ❌ Error cargando datos desde SQLite:', error);
+      setFeatured([]);
+      setPopular([]);
+    }
   }
 
   return (
@@ -61,6 +82,9 @@ export default function HomePage() {
         <IonToolbar>
           <IonTitle>Home</IonTitle>
           <IonButtons slot="end">
+            <IonButton onClick={handleSync} disabled={isSyncing}>
+              {isSyncing ? <IonSpinner name="crescent" /> : <IonIcon icon={refresh} />}
+            </IonButton>
             <IonButton onClick={() => setFiltersOpen(v => !v)}>
               <IonIcon icon={filter} />
             </IonButton>
@@ -119,6 +143,15 @@ export default function HomePage() {
             </IonItem>
           ))}
         </IonList>
+
+        {/* Toast para mostrar mensajes de sincronización */}
+        <IonToast
+          isOpen={showToast}
+          onDidDismiss={() => setShowToast(false)}
+          message={syncMessage}
+          duration={3000}
+          position="top"
+        />
       </IonContent>
     </IonPage>
   );

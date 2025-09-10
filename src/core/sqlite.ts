@@ -1,48 +1,225 @@
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite'
 
+// Configuración centralizada de la base de datos
+const DB_CONFIG = {
+  name: 'imaginario',
+  encrypted: false,
+  mode: 'no-encryption',
+  version: 1,
+  readonly: false
+} as const;
+
 let sqlite: SQLiteConnection | null = null
 let db: SQLiteDBConnection | null = null
 let dbInitialized = false
+let schemaInitialized = false
 
+/**
+ * Inicializa la base de datos SQLite con gestión inteligente de conexiones
+ */
 export async function initDb() {
   console.log('[sqlite] 🚀 Inicializando base de datos (nativo)')
 
   try {
+    // Crear SQLiteConnection si no existe
     if (!sqlite) {
       sqlite = new SQLiteConnection(CapacitorSQLite)
       console.log('[sqlite] ✅ SQLiteConnection creada')
     }
 
-    const dbConnection = await sqlite.createConnection(
-      'imaginario.db',
-      false,
-      'no-encryption',
-      1,
-      false
-    )
-    await dbConnection.open()
-    console.log('[sqlite] ✅ Conexión abierta a imaginario.db')
-
-    await dbConnection.execute(`
-      CREATE TABLE IF NOT EXISTS _meta (
-        key TEXT PRIMARY KEY,
-        value TEXT
+    // Verificar si ya existe una conexión activa
+    const isConnected = await sqlite.isConnection(DB_CONFIG.name, DB_CONFIG.readonly)
+    
+    if (isConnected.result) {
+      console.log('[sqlite] 🔄 Reutilizando conexión existente')
+      db = await sqlite.retrieveConnection(DB_CONFIG.name, DB_CONFIG.readonly)
+    } else {
+      console.log('[sqlite] 📝 Creando nueva conexión')
+      db = await sqlite.createConnection(
+        DB_CONFIG.name,
+        DB_CONFIG.encrypted,
+        DB_CONFIG.mode,
+        DB_CONFIG.version,
+        DB_CONFIG.readonly
       )
-    `)
-    console.log('[sqlite] ✅ Tabla _meta creada/verificada')
+      await db.open()
+      console.log('[sqlite] ✅ Conexión abierta a', DB_CONFIG.name)
+    }
 
-    db = dbConnection
+    // Inicializar esquema solo si no se ha hecho antes
+    if (!schemaInitialized) {
+      await initializeSchema()
+      schemaInitialized = true
+    }
+    
     dbInitialized = true
-    return dbConnection
+    return db
   } catch (err) {
     console.error('[sqlite] ❌ Error inicializando base de datos:', err)
     throw err
   }
 }
 
+/**
+ * Inicializa el esquema de la base de datos
+ */
+async function initializeSchema() {
+  if (!db) throw new Error('Base de datos no inicializada')
+
+  console.log('[sqlite] 📋 Inicializando esquema de base de datos...')
+
+  // Tabla de metadatos
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS _meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla _meta creada/verificada')
+
+  // Tabla de activity_log
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      level TEXT NOT NULL CHECK(level IN ('info', 'warn', 'error')),
+      category TEXT NOT NULL CHECK(category IN ('sync', 'error', 'user_action')),
+      message TEXT NOT NULL,
+      details TEXT,
+      table_name TEXT,
+      record_count INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla activity_log creada/verificada')
+
+  // Tabla de birds (catálogo principal)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS birds (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      scientific_name TEXT,
+      rarity INTEGER,
+      popularity INTEGER,
+      tags TEXT,
+      image_url TEXT,
+      audio_url TEXT,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla birds creada/verificada')
+
+  // Tabla de favoritos locales
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS favorites_local (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT UNIQUE NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla favorites_local creada/verificada')
+
+  // Tabla de imaginarios
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS imaginarios (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      tags TEXT,
+      image_url TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla imaginarios creada/verificada')
+
+  // Índices para activity_log
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp 
+    ON activity_log(timestamp DESC)
+  `)
+  
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_activity_log_category 
+    ON activity_log(category, timestamp DESC)
+  `)
+  console.log('[sqlite] ✅ Índices de activity_log creados/verificados')
+
+  // Índices para birds
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_birds_popularity 
+    ON birds(popularity DESC, updated_at DESC)
+  `)
+  
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_birds_deleted 
+    ON birds(deleted_at)
+  `)
+  console.log('[sqlite] ✅ Índices de birds creados/verificados')
+
+  console.log('[sqlite] ✅ Esquema de base de datos inicializado completamente')
+}
+
 export async function getDb(): Promise<SQLiteDBConnection> {
   if (dbInitialized && db) return db
   return await initDb()
+}
+
+/**
+ * Cierra la conexión actual y limpia el estado
+ */
+export async function closeDb() {
+  try {
+    if (sqlite && db) {
+      await sqlite.closeConnection(DB_CONFIG.name, DB_CONFIG.readonly)
+      console.log('[sqlite] 🔒 Conexión cerrada')
+    }
+  } catch (err) {
+    console.warn('[sqlite] ⚠️ Error cerrando conexión:', err)
+  } finally {
+    db = null
+    dbInitialized = false
+    // No resetear schemaInitialized para evitar recrear tablas
+  }
+}
+
+/**
+ * Reinicia la base de datos (cierra y vuelve a abrir)
+ */
+export async function resetDb() {
+  console.log('[sqlite] 🔄 Reiniciando base de datos...')
+  await closeDb()
+  return await initDb()
+}
+
+/**
+ * Verifica si la base de datos está inicializada
+ */
+export function isDbReady(): boolean {
+  return dbInitialized && db !== null
+}
+
+/**
+ * Verifica si el esquema está inicializado
+ */
+export function isSchemaReady(): boolean {
+  return schemaInitialized
+}
+
+/**
+ * Obtiene información del estado de la conexión
+ */
+export function getConnectionStatus() {
+  return {
+    sqliteReady: sqlite !== null,
+    dbReady: dbInitialized && db !== null,
+    schemaReady: schemaInitialized,
+    connectionName: DB_CONFIG.name
+  }
 }
 
 // Funciones auxiliares para metadatos

@@ -1,16 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
-
-export type Bird = {
-  id: string;
-  name: string;
-  description: string | null;
-  rarity: number | null;
-  popularity: number | null;
-  tags: string | null;
-  image_url: string | null;
-  updated_at: number;
-  deleted_at: number | null;
-};
+import type { Bird } from '../core/db/dao/birds';
 
 export async function fetchBirds(): Promise<Bird[]> {
   const { data, error } = await supabase
