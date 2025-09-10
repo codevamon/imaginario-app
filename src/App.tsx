@@ -21,6 +21,8 @@ import Tab2 from './pages/Tab2';
 import Tab3 from './pages/Tab3';
 import HomePage from './modules/home/HomePage';
 import DiscoverPage from './modules/discover/DiscoverPage';
+import BirdDetail from './modules/bird/BirdDetail';
+import ProfilePage from './modules/profile/ProfilePage';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
 
 setupIonicReact();
@@ -157,6 +159,8 @@ const App: React.FC = () => {
           {/* Páginas sin TabBar */}
           <Route exact path="/home" component={HomePage} />
           <Route exact path="/discover" component={DiscoverPage} />
+          <Route exact path="/bird/:id" component={BirdDetail} />
+          <Route exact path="/profile" component={ProfilePage} />
 
           {/* Layout de tabs */}
           <Route path="/tabs" component={Tabs} />

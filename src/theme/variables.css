@@ -1,2 +1,10 @@
 /* For information on how to create your own theme, please see:
 http://ionicframework.com/docs/theming/ */
+
+/* Custom chip styles */
+.chip-small {
+  font-size: 12px;
+  height: 20px;
+  --padding-start: 4px;
+  --padding-end: 4px;
+}
