@@ -214,7 +214,7 @@ export async function pullTableDelta(table: string, pageSize = SYNC_CONFIG.pageS
     }));
 
     await upsertMany(table, normalizedRows);
-    since = rows[rows.length - 1].updated_at || 0;
+    since = rows[rows.length - 1].updated_at ? Number(rows[rows.length - 1].updated_at) : 0;
     total += rows.length;
 
     // Guardar cursor de sincronización

@@ -1,24 +1,24 @@
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonButton, IonIcon, IonSearchbar, IonItem, IonList,
-  IonSpinner, IonToast
+  IonSpinner, IonToast, IonChip, IonText
 } from '@ionic/react';
 import { filter, refresh } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
-import BirdSlideCard from './BirdSlideCard';
 import { supabase } from '../../core/supabase';
 import { pullAllTables } from '../../core/sync/pull';
-import { listBirds, getFeaturedBirds, getTopPopular, type Bird } from '../../core/db/dao/birds';
+import { listBirds, type Bird } from '../../core/db/dao/birds';
 
-import 'swiper/css';                 // asegúrate de tener "swiper" instalado
 import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 
 export default function HomePage() {
   const router = useIonRouter();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [featured, setFeatured] = useState<Bird[]>([]);
   const [popular, setPopular] = useState<Bird[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -58,23 +58,44 @@ export default function HomePage() {
 
   async function loadData() {
     try {
+      setLoading(true);
       console.log('[HomePage] Cargando datos desde SQLite (offline-first)...');
       
       // Cargar desde SQLite local (offline-first)
       const [featuredBirds, popularBirds] = await Promise.all([
-        getFeaturedBirds(8),
-        getTopPopular(5)
+        listBirds({ order: 'updated_at' }),
+        listBirds({ popularity: 'desc', order: 'name' })
       ]);
       
-      setFeatured(featuredBirds);
-      setPopular(popularBirds);
+      setFeatured(featuredBirds.slice(0, 8));
+      setPopular(popularBirds.slice(0, 8));
       console.log('[HomePage] ✅ Datos cargados desde SQLite local');
     } catch (error) {
       console.error('[HomePage] ❌ Error cargando datos desde SQLite:', error);
       setFeatured([]);
       setPopular([]);
+    } finally {
+      setLoading(false);
     }
   }
+
+  const getRarityColor = (rarity: number | null | undefined): string => {
+    if (rarity === null || rarity === undefined) return 'medium';
+    if (rarity === 0) return 'success';
+    if (rarity === 1) return 'warning';
+    if (rarity === 2) return 'danger';
+    if (rarity === 3) return 'dark';
+    return 'medium';
+  };
+
+  const getRarityText = (rarity: number | null | undefined): string => {
+    if (rarity === null || rarity === undefined) return 'No especificada';
+    if (rarity === 0) return 'Baja';
+    if (rarity === 1) return 'Media';
+    if (rarity === 2) return 'Alta';
+    if (rarity === 3) return 'Muy alta';
+    return 'No especificada';
+  };
 
   return (
     <IonPage>
@@ -93,12 +114,12 @@ export default function HomePage() {
       </IonHeader>
 
       <IonContent fullscreen>
-        {/* 1. Saludo */}
+        {/* Saludo */}
         <div style={{ padding: '12px 16px', fontSize: 22, fontWeight: 700 }}>
           Te damos la bienvenida 👋
         </div>
 
-        {/* 2. Búsqueda → Discover */}
+        {/* Búsqueda → Discover */}
         <div style={{ padding: '0 12px 8px' }}>
           <IonSearchbar
             placeholder="Buscar aves"
@@ -117,32 +138,211 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* 3. Carrusel */}
-        <div style={{ padding: '0 12px 8px', fontWeight: 700 }}>Favoritos de la semana</div>
-        <div style={{ padding: '0 8px 16px' }}>
-          <Swiper slidesPerView={1.1} spaceBetween={12}>
-            {featured.map(b => (
-              <SwiperSlide key={b.id}><BirdSlideCard b={b} /></SwiperSlide>
-            ))}
-          </Swiper>
-        </div>
+        {loading ? (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '200px',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <IonSpinner />
+            <IonText>Cargando aves...</IonText>
+          </div>
+        ) : (
+          <>
+            {/* Featured Birds (Novedades) */}
+            <div style={{ padding: '0 16px 8px' }}>
+              <IonTitle style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
+                Favoritos de la semana
+              </IonTitle>
+            </div>
+            
+            {featured.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center' }}>
+                <IonText color="medium">No hay aves disponibles</IonText>
+              </div>
+            ) : (
+              <div style={{ padding: '0 8px 24px' }}>
+                <Swiper slidesPerView={1.2} spaceBetween={12} freeMode>
+                  {featured.map((bird) => (
+                    <SwiperSlide key={bird.id}>
+                      <div 
+                        style={{
+                          borderRadius: '12px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          overflow: 'hidden',
+                          backgroundColor: 'white',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => router.push(`/bird/${bird.id}`)}
+                      >
+                        {/* Imagen */}
+                        <div style={{ 
+                          width: '100%', 
+                          height: '180px', 
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          {bird.image_url ? (
+                            <img 
+                              src={bird.image_url} 
+                              alt={bird.name}
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'cover'
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '100%',
+                              height: '100%',
+                              backgroundColor: '#f0f0f0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '48px'
+                            }}>
+                              🐦
+                            </div>
+                          )}
+                          
+                          {/* Chip de rareza */}
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '8px', 
+                            right: '8px' 
+                          }}>
+                            <IonChip color={getRarityColor(bird.rarity)}>
+                              {getRarityText(bird.rarity)}
+                            </IonChip>
+                          </div>
+                        </div>
+                        
+                        {/* Contenido */}
+                        <div style={{ padding: '12px' }}>
+                          <div style={{ 
+                            fontWeight: '600', 
+                            fontSize: '16px',
+                            marginBottom: '4px'
+                          }}>
+                            {bird.name}
+                          </div>
+                          {bird.scientific_name && (
+                            <div style={{ 
+                              fontSize: '14px', 
+                              fontStyle: 'italic',
+                              color: '#666'
+                            }}>
+                              {bird.scientific_name}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </SwiperSlide>
+                  ))}
+                </Swiper>
+              </div>
+            )}
 
-        {/* 4. Top 5 populares */}
-        <div style={{ padding: '0 12px 8px', fontWeight: 700 }}>Aves populares</div>
-        <IonList inset>
-          {popular.map((b: Bird) => (
-            <IonItem key={b.id} button detail onClick={() => router.push(`/bird/${b.id}`)}>
-              <div slot="start" className="thumb"
-                   style={{width:56,height:56,borderRadius:8,background:'#eee',overflow:'hidden'}}>
-                <img alt={b.name} src={b.image_url||''} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+            {/* Popular Birds */}
+            <div style={{ padding: '0 16px 8px' }}>
+              <IonTitle style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
+                Aves populares
+              </IonTitle>
+            </div>
+            
+            {popular.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center' }}>
+                <IonText color="medium">No hay aves disponibles</IonText>
               </div>
-              <div>
-                <div style={{ fontWeight: 600 }}>{b.name}</div>
-                {b.scientific_name && <div style={{ fontSize: 12, opacity:.7 }}>{b.scientific_name}</div>}
+            ) : (
+              <div style={{ padding: '0 8px 24px' }}>
+                <Swiper slidesPerView={1.2} spaceBetween={12} freeMode>
+                  {popular.map((bird) => (
+                    <SwiperSlide key={bird.id}>
+                      <div 
+                        style={{
+                          borderRadius: '12px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          overflow: 'hidden',
+                          backgroundColor: 'white',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => router.push(`/bird/${bird.id}`)}
+                      >
+                        {/* Imagen */}
+                        <div style={{ 
+                          width: '100%', 
+                          height: '180px', 
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          {bird.image_url ? (
+                            <img 
+                              src={bird.image_url} 
+                              alt={bird.name}
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'cover'
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '100%',
+                              height: '100%',
+                              backgroundColor: '#f0f0f0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '48px'
+                            }}>
+                              🐦
+                            </div>
+                          )}
+                          
+                          {/* Chip de rareza */}
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '8px', 
+                            right: '8px' 
+                          }}>
+                            <IonChip color={getRarityColor(bird.rarity)}>
+                              {getRarityText(bird.rarity)}
+                            </IonChip>
+                          </div>
+                        </div>
+                        
+                        {/* Contenido */}
+                        <div style={{ padding: '12px' }}>
+                          <div style={{ 
+                            fontWeight: '600', 
+                            fontSize: '16px',
+                            marginBottom: '4px'
+                          }}>
+                            {bird.name}
+                          </div>
+                          {bird.scientific_name && (
+                            <div style={{ 
+                              fontSize: '14px', 
+                              fontStyle: 'italic',
+                              color: '#666'
+                            }}>
+                              {bird.scientific_name}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </SwiperSlide>
+                  ))}
+                </Swiper>
               </div>
-            </IonItem>
-          ))}
-        </IonList>
+            )}
+          </>
+        )}
 
         {/* Toast para mostrar mensajes de sincronización */}
         <IonToast

@@ -14,7 +14,9 @@ import {
   IonButton,
   IonIcon,
   IonChip,
-  IonText
+  IonText,
+  IonSelect,
+  IonSelectOption
 } from '@ionic/react';
 import { filter, search } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
@@ -27,13 +29,31 @@ const DiscoverPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // Nuevos estados para filtros
+  const [rarityFilter, setRarityFilter] = useState<number | undefined>(undefined);
+  const [orderFilter, setOrderFilter] = useState<'name' | 'updated_at'>('name');
+  const [popularityFilter, setPopularityFilter] = useState<'asc' | 'desc' | undefined>(undefined);
 
-  // Cargar aves desde SQLite
+  // Hook de carga con filtros
   useEffect(() => {
-    const loadBirds = async () => {
+    const loadBirdsWithFilters = async () => {
       try {
-        console.log('[DiscoverPage] Cargando aves desde SQLite...');
-        const birdsData = await listBirds();
+        setLoading(true);
+        console.log('[DiscoverPage] Cargando aves con filtros:', {
+          search: searchTerm,
+          rarity: rarityFilter,
+          order: orderFilter,
+          popularity: popularityFilter
+        });
+        
+        const birdsData = await listBirds({
+          search: searchTerm,
+          rarity: rarityFilter,
+          order: orderFilter,
+          popularity: popularityFilter
+        });
+        
         setBirds(birdsData);
         setFilteredBirds(birdsData);
         console.log('[DiscoverPage] ✅ Aves cargadas:', birdsData.length);
@@ -44,23 +64,8 @@ const DiscoverPage: React.FC = () => {
       }
     };
 
-    loadBirds();
-  }, []);
-
-  // Filtrar aves por término de búsqueda
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredBirds(birds);
-      return;
-    }
-
-    const filtered = birds.filter(bird => 
-      bird.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (bird.scientific_name && bird.scientific_name.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-    
-    setFilteredBirds(filtered);
-  }, [searchTerm, birds]);
+    loadBirdsWithFilters();
+  }, [searchTerm, rarityFilter, orderFilter, popularityFilter]);
 
   const handleSearchChange = (event: CustomEvent) => {
     setSearchTerm(event.detail.value || '');
@@ -88,6 +93,25 @@ const DiscoverPage: React.FC = () => {
     return 'medium';
   };
 
+  // Funciones helper para los filtros
+  const getRarityFilterText = (): string => {
+    if (rarityFilter === undefined) return 'Todas';
+    return getRarityText(rarityFilter);
+  };
+
+  const getPopularityFilterText = (): string => {
+    if (popularityFilter === undefined) return 'Todas';
+    if (popularityFilter === 'asc') return 'Ascendente';
+    if (popularityFilter === 'desc') return 'Descendente';
+    return 'Todas';
+  };
+
+  const getOrderFilterText = (): string => {
+    if (orderFilter === 'name') return 'Nombre';
+    if (orderFilter === 'updated_at') return 'Fecha';
+    return 'Nombre';
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -112,19 +136,61 @@ const DiscoverPage: React.FC = () => {
           />
         </div>
 
-        {/* Filtros placeholder */}
+        {/* Filtros dinámicos */}
         {filtersOpen && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid #eee' }}>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <IonChip color="primary" outline>
-                <IonLabel>Rareza: Todas</IonLabel>
-              </IonChip>
-              <IonChip color="secondary" outline>
-                <IonLabel>Popularidad: Todas</IonLabel>
-              </IonChip>
-              <IonChip color="tertiary" outline>
-                <IonLabel>Orden: Alfabético</IonLabel>
-              </IonChip>
+          <div style={{ padding: '16px', borderBottom: '1px solid #eee' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Filtro de Rareza */}
+              <div>
+                <IonLabel style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px', display: 'block' }}>
+                  Rareza: {getRarityFilterText()}
+                </IonLabel>
+                <IonSelect
+                  value={rarityFilter}
+                  placeholder="Seleccionar rareza"
+                  onIonChange={(e) => setRarityFilter(e.detail.value)}
+                  interface="popover"
+                >
+                  <IonSelectOption value={undefined}>Todas</IonSelectOption>
+                  <IonSelectOption value={0}>Baja</IonSelectOption>
+                  <IonSelectOption value={1}>Media</IonSelectOption>
+                  <IonSelectOption value={2}>Alta</IonSelectOption>
+                  <IonSelectOption value={3}>Muy alta</IonSelectOption>
+                </IonSelect>
+              </div>
+
+              {/* Filtro de Popularidad */}
+              <div>
+                <IonLabel style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px', display: 'block' }}>
+                  Popularidad: {getPopularityFilterText()}
+                </IonLabel>
+                <IonSelect
+                  value={popularityFilter}
+                  placeholder="Seleccionar popularidad"
+                  onIonChange={(e) => setPopularityFilter(e.detail.value)}
+                  interface="popover"
+                >
+                  <IonSelectOption value={undefined}>Todas</IonSelectOption>
+                  <IonSelectOption value="asc">Ascendente</IonSelectOption>
+                  <IonSelectOption value="desc">Descendente</IonSelectOption>
+                </IonSelect>
+              </div>
+
+              {/* Filtro de Orden */}
+              <div>
+                <IonLabel style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px', display: 'block' }}>
+                  Orden: {getOrderFilterText()}
+                </IonLabel>
+                <IonSelect
+                  value={orderFilter}
+                  placeholder="Seleccionar orden"
+                  onIonChange={(e) => setOrderFilter(e.detail.value)}
+                  interface="popover"
+                >
+                  <IonSelectOption value="name">Nombre</IonSelectOption>
+                  <IonSelectOption value="updated_at">Fecha</IonSelectOption>
+                </IonSelect>
+              </div>
             </div>
           </div>
         )}
@@ -233,7 +299,7 @@ const DiscoverPage: React.FC = () => {
             borderTop: '1px solid #eee'
           }}>
             <IonText color="medium" style={{ fontSize: '14px' }}>
-              Mostrando {filteredBirds.length} de {birds.length} aves
+              Mostrando {filteredBirds.length} aves
             </IonText>
           </div>
         )}

@@ -1,128 +1,148 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import {
   IonPage,
   IonHeader,
   IonToolbar,
-  IonTitle,
   IonButtons,
-  IonButton,
-  IonIcon,
+  IonBackButton,
+  IonTitle,
   IonContent,
-  IonSpinner,
   IonText,
-  IonChip,
-  IonCard,
-  IonCardContent
+  IonAccordionGroup,
+  IonAccordion,
+  IonItem,
+  IonLabel,
+  IonIcon,
+  IonSpinner
 } from '@ionic/react';
-import { arrowBack, star, starOutline } from 'ionicons/icons';
-import { useIonRouter } from '@ionic/react';
-import { listBirds, type Bird } from '../../core/db/dao/birds';
-import { setLocalFavorite, isFavLocal } from '../../core/db/dao/catalog';
+import { useParams } from 'react-router-dom';
+import { play, pause } from 'ionicons/icons';
+import { getBirdById, type Bird } from '../../core/db/dao/birds';
+import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
+import { getMusiciansByBirdId, type Musician } from '../../core/db/dao/musicians';
 
 const BirdDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const router = useIonRouter();
   const [bird, setBird] = useState<Bird | null>(null);
-  const [isFavorite, setIsFavorite] = useState<boolean>(false);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [musicians, setMusicians] = useState<Musician[]>([]);
   const [loading, setLoading] = useState(true);
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [playingTrack, setPlayingTrack] = useState<string | null>(null);
 
-  // Cargar datos del ave
   useEffect(() => {
-    const loadBird = async () => {
+    const loadData = async () => {
       if (!id) {
-        console.error('[BirdDetail] No se proporcionó ID de ave');
+        setError('ID de ave no proporcionado');
         setLoading(false);
         return;
       }
 
       try {
-        console.log('[BirdDetail] Cargando ave con ID:', id);
-        const birdsData = await listBirds();
-        const foundBird = birdsData.find(b => b.id === id);
-        
-        if (!foundBird) {
-          console.warn('[BirdDetail] Ave no encontrada con ID:', id);
-          setLoading(false);
+        setLoading(true);
+        setError(null);
+
+        const birdData = await getBirdById(id);
+        if (!birdData) {
+          setError('Ave no encontrada');
           return;
         }
+        setBird(birdData);
 
-        setBird(foundBird);
-        console.log('[BirdDetail] ✅ Ave cargada:', foundBird.name);
+        const birdTracks = await getTracksByBirdId(id);
+        setTracks(birdTracks);
 
-        // Verificar si es favorito
-        const isFav = await isFavLocal(id);
-        setIsFavorite(isFav);
-        console.log('[BirdDetail] Estado de favorito:', isFav);
-      } catch (error) {
-        console.error('[BirdDetail] ❌ Error cargando ave:', error);
+        const birdMusicians = await getMusiciansByBirdId(id);
+        setMusicians(birdMusicians);
+
+      } catch (err) {
+        console.error('[BirdDetail] Error:', err);
+        setError('Error cargando ave');
       } finally {
         setLoading(false);
       }
     };
 
-    loadBird();
+    loadData();
   }, [id]);
 
-  const handleToggleFavorite = async () => {
-    if (!bird || favoriteLoading) return;
+  const handlePlayTrack = (trackId: string, url: string) => {
+    const audio = document.getElementById(`audio-${trackId}`) as HTMLAudioElement;
+    
+    if (!audio) return;
 
-    setFavoriteLoading(true);
-    try {
-      const newFavoriteState = !isFavorite;
-      await setLocalFavorite(bird.id, newFavoriteState);
-      setIsFavorite(newFavoriteState);
-      console.log('[BirdDetail] ✅ Favorito actualizado:', newFavoriteState);
-    } catch (error) {
-      console.error('[BirdDetail] ❌ Error actualizando favorito:', error);
-    } finally {
-      setFavoriteLoading(false);
+    // Pausar cualquier track que esté reproduciéndose
+    if (playingTrack && playingTrack !== trackId) {
+      const currentAudio = document.getElementById(`audio-${playingTrack}`) as HTMLAudioElement;
+      if (currentAudio) {
+        currentAudio.pause();
+      }
+    }
+
+    if (playingTrack === trackId) {
+      // Pausar el track actual
+      audio.pause();
+      setPlayingTrack(null);
+    } else {
+      // Reproducir el nuevo track
+      audio.play();
+      setPlayingTrack(trackId);
     }
   };
 
-  const getRarityText = (rarity: number | null | undefined): string => {
-    if (rarity === null || rarity === undefined) return 'No especificada';
-    if (rarity === 0) return 'Baja';
-    if (rarity === 1) return 'Media';
-    if (rarity === 2) return 'Alta';
-    if (rarity === 3) return 'Muy alta';
-    return 'No especificada';
-  };
-
-  const getRarityColor = (rarity: number | null | undefined): string => {
-    if (rarity === null || rarity === undefined) return 'medium';
-    if (rarity === 0) return 'success';
-    if (rarity === 1) return 'warning';
-    if (rarity === 2) return 'danger';
-    if (rarity === 3) return 'dark';
-    return 'medium';
-  };
 
   if (loading) {
     return (
       <IonPage>
         <IonHeader>
           <IonToolbar>
-            <IonTitle>Cargando...</IonTitle>
             <IonButtons slot="start">
-              <IonButton onClick={() => router.back()}>
-                <IonIcon icon={arrowBack} />
-              </IonButton>
+              <IonBackButton defaultHref="/discover" />
             </IonButtons>
+            <IonTitle>Cargando...</IonTitle>
           </IonToolbar>
         </IonHeader>
         <IonContent>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100%',
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '50vh',
             flexDirection: 'column',
             gap: '16px'
           }}>
-            <IonSpinner name="crescent" />
+            <IonSpinner />
             <IonText>Cargando ave...</IonText>
+          </div>
+        </IonContent>
+      </IonPage>
+    );
+  }
+
+  if (error) {
+    return (
+      <IonPage>
+        <IonHeader>
+          <IonToolbar>
+            <IonButtons slot="start">
+              <IonBackButton defaultHref="/discover" />
+            </IonButtons>
+            <IonTitle>Error</IonTitle>
+          </IonToolbar>
+        </IonHeader>
+        <IonContent>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '50vh',
+            flexDirection: 'column',
+            gap: '16px',
+            padding: '20px'
+          }}>
+            <IonText color="danger" style={{ fontSize: '18px', textAlign: 'center' }}>
+              {error}
+            </IonText>
           </div>
         </IonContent>
       </IonPage>
@@ -134,30 +154,25 @@ const BirdDetail: React.FC = () => {
       <IonPage>
         <IonHeader>
           <IonToolbar>
-            <IonTitle>Ave no encontrada</IonTitle>
             <IonButtons slot="start">
-              <IonButton onClick={() => router.back()}>
-                <IonIcon icon={arrowBack} />
-              </IonButton>
+              <IonBackButton defaultHref="/discover" />
             </IonButtons>
+            <IonTitle>Ave no encontrada</IonTitle>
           </IonToolbar>
         </IonHeader>
         <IonContent>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100%',
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '50vh',
             flexDirection: 'column',
             gap: '16px',
             padding: '20px'
           }}>
             <IonText color="medium" style={{ fontSize: '18px', textAlign: 'center' }}>
-              No se pudo encontrar esta ave
+              Ave no encontrada
             </IonText>
-            <IonButton onClick={() => router.back()}>
-              Volver
-            </IonButton>
           </div>
         </IonContent>
       </IonPage>
@@ -168,37 +183,23 @@ const BirdDetail: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonTitle>{bird.name}</IonTitle>
           <IonButtons slot="start">
-            <IonButton onClick={() => router.back()}>
-              <IonIcon icon={arrowBack} />
-            </IonButton>
+            <IonBackButton defaultHref="/discover" />
           </IonButtons>
-          <IonButtons slot="end">
-            <IonButton 
-              onClick={handleToggleFavorite}
-              disabled={favoriteLoading}
-            >
-              {favoriteLoading ? (
-                <IonSpinner name="crescent" style={{ width: '20px', height: '20px' }} />
-              ) : (
-                <IonIcon icon={isFavorite ? star : starOutline} />
-              )}
-            </IonButton>
-          </IonButtons>
+          <IonTitle>{bird.name}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
       <IonContent>
-        {/* Imagen principal */}
-        <div style={{ position: 'relative', width: '100%', height: '200px' }}>
+        {/* Sección Hero */}
+        <div style={{ position: 'relative', width: '100%', height: '250px' }}>
           {bird.image_url ? (
-            <img
-              src={bird.image_url}
+            <img 
+              src={bird.image_url} 
               alt={bird.name}
-              style={{
-                width: '100%',
-                height: '100%',
+              style={{ 
+                width: '100%', 
+                height: '100%', 
                 objectFit: 'cover'
               }}
             />
@@ -215,114 +216,151 @@ const BirdDetail: React.FC = () => {
               🐦
             </div>
           )}
-        </div>
-
-        {/* Información principal */}
-        <div style={{ padding: '20px' }}>
-          {/* Nombre y científico */}
-          <div style={{ marginBottom: '20px' }}>
+          
+          {/* Overlay gradiente */}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '100px',
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            padding: '16px'
+          }}>
             <h1 style={{ 
-              fontSize: '28px', 
-              fontWeight: 'bold', 
-              margin: '0 0 8px 0',
-              color: '#333'
+              color: 'white', 
+              margin: 0, 
+              fontSize: '24px', 
+              fontWeight: 'bold',
+              textShadow: '0 2px 4px rgba(0,0,0,0.5)'
             }}>
               {bird.name}
             </h1>
-            
             {bird.scientific_name && (
-              <p style={{
-                fontSize: '18px',
+              <IonText style={{ 
+                color: 'white', 
                 fontStyle: 'italic',
-                color: '#666',
-                margin: '0 0 16px 0'
+                fontSize: '16px',
+                textShadow: '0 1px 2px rgba(0,0,0,0.5)'
               }}>
                 {bird.scientific_name}
-              </p>
+              </IonText>
             )}
-
-            {/* Chips de información */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-              <IonChip color={getRarityColor(Number(bird.rarity) || 0)}>
-                <IonText>Rareza: {getRarityText(Number(bird.rarity) || 0)}</IonText>
-              </IonChip>
-              
-              {bird.popularity && (
-                <IonChip color="primary">
-                  <IonText>Popularidad: {bird.popularity}</IonText>
-                </IonChip>
-              )}
-
-              {bird.tags && (
-                <IonChip color="secondary">
-                  <IonText>{bird.tags}</IonText>
-                </IonChip>
-              )}
-            </div>
-          </div>
-
-          {/* Descripción */}
-          {bird.description && (
-            <IonCard>
-              <IonCardContent>
-                <h3 style={{ 
-                  fontSize: '20px', 
-                  fontWeight: '600', 
-                  margin: '0 0 12px 0',
-                  color: '#333'
-                }}>
-                  Descripción
-                </h3>
-                <p style={{
-                  fontSize: '16px',
-                  lineHeight: '1.6',
-                  color: '#555',
-                  margin: 0
-                }}>
-                  {bird.description}
-                </p>
-              </IonCardContent>
-            </IonCard>
-          )}
-
-          {/* Audio si existe */}
-          {bird.audio_url && (
-            <IonCard style={{ marginTop: '16px' }}>
-              <IonCardContent>
-                <h3 style={{ 
-                  fontSize: '20px', 
-                  fontWeight: '600', 
-                  margin: '0 0 12px 0',
-                  color: '#333'
-                }}>
-                  Audio
-                </h3>
-                <audio 
-                  controls 
-                  style={{ width: '100%' }}
-                  preload="metadata"
-                >
-                  <source src={bird.audio_url} type="audio/mpeg" />
-                  <source src={bird.audio_url} type="audio/wav" />
-                  Tu navegador no soporta el elemento de audio.
-                </audio>
-              </IonCardContent>
-            </IonCard>
-          )}
-
-          {/* Estado de favorito */}
-          <div style={{ 
-            marginTop: '20px', 
-            padding: '16px', 
-            backgroundColor: isFavorite ? '#e8f5e8' : '#f5f5f5',
-            borderRadius: '8px',
-            textAlign: 'center'
-          }}>
-            <IonText color={isFavorite ? 'success' : 'medium'}>
-              {isFavorite ? '⭐ Esta ave está en tus favoritos' : 'Agrega esta ave a tus favoritos'}
-            </IonText>
           </div>
         </div>
+
+        {/* Detalles básicos */}
+        <div style={{ padding: '16px' }}>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            {bird.size && (
+              <IonText style={{ fontWeight: '500' }}>
+                Tamaño: <span style={{ fontWeight: 'normal' }}>{bird.size}</span>
+              </IonText>
+            )}
+            {bird.weight && (
+              <IonText style={{ fontWeight: '500' }}>
+                Peso: <span style={{ fontWeight: 'normal' }}>{bird.weight}</span>
+              </IonText>
+            )}
+            {bird.stage && (
+              <IonText style={{ fontWeight: '500' }}>
+                Etapa: <span style={{ fontWeight: 'normal' }}>{bird.stage}</span>
+              </IonText>
+            )}
+          </div>
+        </div>
+
+        {/* Secciones expandibles */}
+        <IonAccordionGroup>
+          {/* Descripción */}
+          <IonAccordion value="description">
+            <IonItem slot="header" color="light">
+              <IonLabel>Descripción</IonLabel>
+            </IonItem>
+            <div slot="content" style={{ padding: '16px' }}>
+              <IonText>
+                {bird.description || 'No hay descripción disponible para esta ave.'}
+              </IonText>
+            </div>
+          </IonAccordion>
+
+          {/* Cantos */}
+          <IonAccordion value="songs">
+            <IonItem slot="header" color="light">
+              <IonLabel>Cantos ({tracks.length})</IonLabel>
+            </IonItem>
+            <div slot="content">
+              {tracks.length === 0 ? (
+                <div style={{ padding: '16px' }}>
+                  <IonText color="medium">No hay cantos disponibles</IonText>
+                </div>
+              ) : (
+                tracks.map((track) => (
+                  <div key={track.id}>
+                    <IonItem button onClick={() => handlePlayTrack(track.id, track.url)}>
+                      <IonIcon 
+                        icon={playingTrack === track.id ? pause : play} 
+                        slot="start"
+                        style={{ 
+                          fontSize: '24px',
+                          color: playingTrack === track.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
+                        }}
+                      />
+                      <IonLabel>{track.title}</IonLabel>
+                    </IonItem>
+                    <audio 
+                      id={`audio-${track.id}`}
+                      src={track.url}
+                      preload="none"
+                      onEnded={() => setPlayingTrack(null)}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </IonAccordion>
+
+          {/* Música */}
+          <IonAccordion value="music">
+            <IonItem slot="header" color="light">
+              <IonLabel>Música ({musicians.length})</IonLabel>
+            </IonItem>
+            <div slot="content">
+              {musicians.length === 0 ? (
+                <div style={{ padding: '16px' }}>
+                  <IonText color="medium">No hay música disponible</IonText>
+                </div>
+              ) : (
+                musicians.map((musician) => (
+                  <div key={musician.id}>
+                    <IonItem button onClick={() => handlePlayTrack(musician.id, musician.url)}>
+                      <IonIcon 
+                        icon={playingTrack === musician.id ? pause : play} 
+                        slot="start"
+                        style={{ 
+                          fontSize: '24px',
+                          color: playingTrack === musician.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
+                        }}
+                      />
+                      <IonLabel>{musician.name}</IonLabel>
+                    </IonItem>
+                    <audio 
+                      id={`audio-${musician.id}`}
+                      src={musician.url}
+                      preload="none"
+                      onEnded={() => setPlayingTrack(null)}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </IonAccordion>
+        </IonAccordionGroup>
       </IonContent>
     </IonPage>
   );

@@ -17,7 +17,7 @@ export default function BirdSlideCard({ b }: { b: Bird }) {
           <div className="name">{b.name}</div>
           {b.scientific_name && <div className="sci">{b.scientific_name}</div>}
         </div>
-        <PlayButton url={b.audio_url}/>
+        {/* <PlayButton url={b.audio_url}/> */}
       </div>
     </div>
   );
