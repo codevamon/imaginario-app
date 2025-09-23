@@ -121,6 +121,47 @@ async function initializeSchema() {
   `)
   console.log('[sqlite] ✅ Tabla favorites_local creada/verificada')
 
+  // Tabla de bird_images
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS bird_images (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      description TEXT,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla bird_images creada/verificada')
+
+  // Tabla de bird_translations
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS bird_translations (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT NOT NULL,
+      lang TEXT NOT NULL,
+      description TEXT,
+      audio_url TEXT,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla bird_translations creada/verificada')
+
+  // Tabla de sings
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS sings (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT NOT NULL,
+      title TEXT,
+      audio_url TEXT NOT NULL,
+      duration_ms INTEGER,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla sings creada/verificada')
+
   // Tabla de imaginarios
   await db.execute(`
     CREATE TABLE IF NOT EXISTS imaginarios (

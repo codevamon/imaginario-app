@@ -24,7 +24,7 @@ const SYNC_CONFIG = {
   pageSize: 200, // Reducido para evitar problemas de payload
   maxRetries: 3,
   retryDelay: 1000, // Base delay para backoff exponencial
-  tables: ['birds'] as const
+  tables: ['birds', 'bird_images', 'bird_translations', 'sings', 'tracks', 'interviews', 'musicians'] as const
 };
 
 // activity_log se inicializa automáticamente en initDb()

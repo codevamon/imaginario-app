@@ -13,13 +13,23 @@ import {
   IonItem,
   IonLabel,
   IonIcon,
-  IonSpinner
+  IonSpinner,
+  IonButton,
+  IonSegment,
+  IonSegmentButton
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
-import { play, pause } from 'ionicons/icons';
+import { play, pause, star, starOutline } from 'ionicons/icons';
 import { getBirdById, type Bird } from '../../core/db/dao/birds';
 import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
 import { getMusiciansByBirdId, type Musician } from '../../core/db/dao/musicians';
+import { setLocalFavorite, isFavLocal } from '../../core/db/dao/catalog';
+import { getImagesByBirdId, type BirdImage } from '../../core/db/dao/bird_images';
+import { getSingsByBirdId, type Sing } from '../../core/db/dao/sings';
+import { getTranslationsByBirdId, type BirdTranslation } from '../../core/db/dao/bird_translations';
+import { getInterviewsByBirdId, type Interview } from '../../core/db/dao/interviews';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 
 const BirdDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +39,12 @@ const BirdDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
+  const [isFav, setIsFav] = useState<boolean>(false);
+  const [images, setImages] = useState<BirdImage[]>([]);
+  const [sings, setSings] = useState<Sing[]>([]);
+  const [translations, setTranslations] = useState<BirdTranslation[]>([]);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [descriptionTab, setDescriptionTab] = useState<'description' | 'translation'>('description');
 
   useEffect(() => {
     const loadData = async () => {
@@ -49,11 +65,26 @@ const BirdDetail: React.FC = () => {
         }
         setBird(birdData);
 
+        const fav = await isFavLocal(id);
+        setIsFav(fav);
+
         const birdTracks = await getTracksByBirdId(id);
         setTracks(birdTracks);
 
         const birdMusicians = await getMusiciansByBirdId(id);
         setMusicians(birdMusicians);
+
+        const birdImages = await getImagesByBirdId(id);
+        setImages(birdImages);
+
+        const birdSings = await getSingsByBirdId(id);
+        setSings(birdSings);
+
+        const birdTranslations = await getTranslationsByBirdId(id);
+        setTranslations(birdTranslations);
+
+        const birdInterviews = await getInterviewsByBirdId(id);
+        setInterviews(birdInterviews);
 
       } catch (err) {
         console.error('[BirdDetail] Error:', err);
@@ -88,6 +119,13 @@ const BirdDetail: React.FC = () => {
       audio.play();
       setPlayingTrack(trackId);
     }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!bird) return;
+    const newFav = !isFav;
+    await setLocalFavorite(bird.id, newFav);
+    setIsFav(newFav);
   };
 
 
@@ -187,13 +225,43 @@ const BirdDetail: React.FC = () => {
             <IonBackButton defaultHref="/discover" />
           </IonButtons>
           <IonTitle>{bird.name}</IonTitle>
+          <IonButtons slot="end">
+            <IonButton onClick={handleToggleFavorite}>
+              <IonIcon
+                slot="icon-only"
+                icon={isFav ? star : starOutline}
+                color={isFav ? 'warning' : 'medium'}
+              />
+            </IonButton>
+          </IonButtons>
         </IonToolbar>
       </IonHeader>
 
       <IonContent>
-        {/* Sección Hero */}
+        {/* Sección Hero - Carrusel */}
         <div style={{ position: 'relative', width: '100%', height: '250px' }}>
-          {bird.image_url ? (
+          {images.length > 0 ? (
+            <Swiper
+              spaceBetween={0}
+              slidesPerView={1}
+              loop={images.length > 1}
+              autoplay={images.length > 1 ? { delay: 3000 } : false}
+            >
+              {images.map((image) => (
+                <SwiperSlide key={image.id}>
+                  <img 
+                    src={image.url} 
+                    alt={image.description || bird.name}
+                    style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      objectFit: 'cover'
+                    }}
+                  />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          ) : bird.image_url ? (
             <img 
               src={bird.image_url} 
               alt={bird.name}
@@ -275,45 +343,90 @@ const BirdDetail: React.FC = () => {
 
         {/* Secciones expandibles */}
         <IonAccordionGroup>
-          {/* Descripción */}
+          {/* Descripción con traducción */}
           <IonAccordion value="description">
             <IonItem slot="header" color="light">
               <IonLabel>Descripción</IonLabel>
             </IonItem>
             <div slot="content" style={{ padding: '16px' }}>
-              <IonText>
-                {bird.description || 'No hay descripción disponible para esta ave.'}
-              </IonText>
+              {translations.length > 0 && (
+                <IonSegment 
+                  value={descriptionTab} 
+                  onIonChange={(e) => setDescriptionTab(e.detail.value as 'description' | 'translation')}
+                  style={{ marginBottom: '16px' }}
+                >
+                  <IonSegmentButton value="description">
+                    <IonLabel>Español</IonLabel>
+                  </IonSegmentButton>
+                  <IonSegmentButton value="translation">
+                    <IonLabel>{translations[0].lang}</IonLabel>
+                  </IonSegmentButton>
+                </IonSegment>
+              )}
+              
+              {descriptionTab === 'description' ? (
+                <IonText>
+                  {bird.description || 'No hay descripción disponible para esta ave.'}
+                </IonText>
+              ) : (
+                <div>
+                  <IonText>
+                    {translations[0]?.description || 'No hay traducción disponible.'}
+                  </IonText>
+                  {translations[0]?.audio_url && (
+                    <div style={{ marginTop: '16px' }}>
+                      <IonButton 
+                        onClick={() => handlePlayTrack(`translation-${translations[0].id}`, translations[0].audio_url!)}
+                        fill="outline"
+                        size="small"
+                      >
+                        <IonIcon 
+                          icon={playingTrack === `translation-${translations[0].id}` ? pause : play} 
+                          slot="start"
+                        />
+                        Reproducir traducción
+                      </IonButton>
+                      <audio 
+                        id={`audio-translation-${translations[0].id}`}
+                        src={translations[0].audio_url}
+                        preload="none"
+                        onEnded={() => setPlayingTrack(null)}
+                        style={{ display: 'none' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </IonAccordion>
 
           {/* Cantos */}
-          <IonAccordion value="songs">
+          <IonAccordion value="sings">
             <IonItem slot="header" color="light">
-              <IonLabel>Cantos ({tracks.length})</IonLabel>
+              <IonLabel>Cantos</IonLabel>
             </IonItem>
             <div slot="content">
-              {tracks.length === 0 ? (
+              {sings.length === 0 ? (
                 <div style={{ padding: '16px' }}>
                   <IonText color="medium">No hay cantos disponibles</IonText>
                 </div>
               ) : (
-                tracks.map((track) => (
-                  <div key={track.id}>
-                    <IonItem button onClick={() => handlePlayTrack(track.id, track.url)}>
+                sings.map((sing) => (
+                  <div key={sing.id}>
+                    <IonItem button onClick={() => handlePlayTrack(sing.id, sing.audio_url)}>
                       <IonIcon 
-                        icon={playingTrack === track.id ? pause : play} 
+                        icon={playingTrack === sing.id ? pause : play} 
                         slot="start"
                         style={{ 
                           fontSize: '24px',
-                          color: playingTrack === track.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
+                          color: playingTrack === sing.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
                         }}
                       />
-                      <IonLabel>{track.title}</IonLabel>
+                      <IonLabel>{sing.title || 'Canto sin título'}</IonLabel>
                     </IonItem>
                     <audio 
-                      id={`audio-${track.id}`}
-                      src={track.url}
+                      id={`audio-${sing.id}`}
+                      src={sing.audio_url}
                       preload="none"
                       onEnded={() => setPlayingTrack(null)}
                       style={{ display: 'none' }}
@@ -327,30 +440,90 @@ const BirdDetail: React.FC = () => {
           {/* Música */}
           <IonAccordion value="music">
             <IonItem slot="header" color="light">
-              <IonLabel>Música ({musicians.length})</IonLabel>
+              <IonLabel>Música</IonLabel>
             </IonItem>
             <div slot="content">
-              {musicians.length === 0 ? (
+              {tracks.length === 0 ? (
                 <div style={{ padding: '16px' }}>
                   <IonText color="medium">No hay música disponible</IonText>
                 </div>
               ) : (
-                musicians.map((musician) => (
-                  <div key={musician.id}>
-                    <IonItem button onClick={() => handlePlayTrack(musician.id, musician.url)}>
+                tracks.map((track) => (
+                  <div key={track.id}>
+                    <IonItem button onClick={() => handlePlayTrack(track.id, track.audio_url)}>
                       <IonIcon 
-                        icon={playingTrack === musician.id ? pause : play} 
+                        icon={playingTrack === track.id ? pause : play} 
                         slot="start"
                         style={{ 
                           fontSize: '24px',
-                          color: playingTrack === musician.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
+                          color: playingTrack === track.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
                         }}
                       />
-                      <IonLabel>{musician.name}</IonLabel>
+                      <IonLabel>{track.title}</IonLabel>
                     </IonItem>
                     <audio 
-                      id={`audio-${musician.id}`}
-                      src={musician.url}
+                      id={`audio-${track.id}`}
+                      src={track.audio_url}
+                      preload="none"
+                      onEnded={() => setPlayingTrack(null)}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </IonAccordion>
+
+          {/* Intérpretes */}
+          <IonAccordion value="musicians">
+            <IonItem slot="header" color="light">
+              <IonLabel>Intérpretes</IonLabel>
+            </IonItem>
+            <div slot="content">
+              {musicians.length === 0 ? (
+                <div style={{ padding: '16px' }}>
+                  <IonText color="medium">No hay intérpretes disponibles</IonText>
+                </div>
+              ) : (
+                musicians.map((musician) => (
+                  <IonItem key={musician.id}>
+                    <IonLabel>
+                      <h3>{musician.name}</h3>
+                      {musician.bio && <p>{musician.bio}</p>}
+                    </IonLabel>
+                  </IonItem>
+                ))
+              )}
+            </div>
+          </IonAccordion>
+
+          {/* Entrevistas */}
+          <IonAccordion value="interviews">
+            <IonItem slot="header" color="light">
+              <IonLabel>Entrevistas</IonLabel>
+            </IonItem>
+            <div slot="content">
+              {interviews.length === 0 ? (
+                <div style={{ padding: '16px' }}>
+                  <IonText color="medium">No hay entrevistas disponibles</IonText>
+                </div>
+              ) : (
+                interviews.map((interview) => (
+                  <div key={interview.id}>
+                    <IonItem button onClick={() => handlePlayTrack(interview.id, interview.audio_url)}>
+                      <IonIcon 
+                        icon={playingTrack === interview.id ? pause : play} 
+                        slot="start"
+                        style={{ 
+                          fontSize: '24px',
+                          color: playingTrack === interview.id ? 'var(--ion-color-primary)' : 'var(--ion-color-medium)'
+                        }}
+                      />
+                      <IonLabel>{interview.title}</IonLabel>
+                    </IonItem>
+                    <audio 
+                      id={`audio-${interview.id}`}
+                      src={interview.audio_url}
                       preload="none"
                       onEnded={() => setPlayingTrack(null)}
                       style={{ display: 'none' }}
