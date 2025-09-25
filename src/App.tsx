@@ -24,6 +24,7 @@ import DiscoverPage from './modules/discover/DiscoverPage';
 import BirdDetail from './modules/bird/BirdDetail';
 import ProfilePage from './modules/profile/ProfilePage';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
+import { pullAllTables } from './core/sync/pull';
 
 setupIonicReact();
 
@@ -75,6 +76,14 @@ const App: React.FC = () => {
         await initDb();
         setDbReady(true);
         console.log('[App] ✅ Base de datos lista y funcionando correctamente');
+        
+        // Sincronización automática inicial
+        try {
+          await pullAllTables();
+          console.log('[App] ✅ Sync inicial completada');
+        } catch (syncError) {
+          console.warn('[App] ⚠️ Sync inicial falló, app continúa:', syncError);
+        }
       } catch (error) {
         console.error('[App] ❌ Error inicializando base de datos:', error);
         setDbError((error as Error).message);

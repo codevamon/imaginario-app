@@ -1,7 +1,7 @@
 // src/core/sync/pull.ts
 import { supabase } from '../supabase';
 import { upsertMany } from '../db/dao';
-import { getMetaValue, setMetaValue } from '../sqlite';
+import { getMetaValue, setMetaValue, getDb } from '../sqlite';
 import { logActivity, initActivityLog } from '../db/dao/activity_log';
 import type { Bird } from '../db/dao/birds';
 
@@ -201,28 +201,130 @@ export async function pullTableDelta(table: string, pageSize = SYNC_CONFIG.pageS
       throw error;
     }
     console.log('[sync] 🔎 Data cruda desde Supabase:', JSON.stringify(data, null, 2));
-    const rows = (data || []) as Bird[];
+    
+    // Logs específicos para tracks e interviews
+    if (table === 'tracks') {
+      console.log("[sync] 📊 Raw tracks from Supabase:", data?.slice(0, 3));
+    }
+    if (table === 'interviews') {
+      console.log("[sync] 📊 Raw interviews from Supabase:", data?.slice(0, 3));
+    }
+    
+    const rows = (data || []) as any[];
     if (!rows.length) break;
 
-    // Normalizar datos antes de insertar
-    const normalizedRows = rows.map(row => ({
-      ...row,
-      deleted_at: row.deleted_at ?? null,
-      updated_at: Number(row.updated_at),
-      rarity: row.rarity ?? null,
-      popularity: row.popularity ?? null
-    }));
+    // Helper seguro para normalizar fechas (epoch ms o string → number | null)
+    const normalizeDate = (value: any): number | null => {
+      if (!value) return null;
+      if (typeof value === 'number') return value > 0 ? value : null;
+      const parsed = Date.parse(value);
+      return isNaN(parsed) ? null : parsed;
+    };
+
+    // Normalizar datos antes de insertar (específico por tabla)
+    const normalizedRows = rows.map(row => {
+      const baseRow = {
+        ...row,
+        updated_at: row.updated_at ? Number(row.updated_at) : null,
+        deleted_at: row.deleted_at ? Number(row.deleted_at) : null
+      };
+      
+      // Campos específicos por tabla
+      if (table === 'birds') {
+        return {
+          ...baseRow,
+          rarity: row.rarity ?? null,
+          popularity: row.popularity ?? null
+        };
+      }
+      
+      // sings, tracks, interviews, musicians → mismos campos
+      return {
+        ...baseRow,
+        title: row.title ?? null,
+        audio_url: row.audio_url ?? null,
+        duration_ms: row.duration_ms ?? null
+      };
+    });
 
     await upsertMany(table, normalizedRows);
+    
+    // Logs específicos después del upsert
+    if (table === 'tracks') {
+      console.log("[sync] ✅ Upserted tracks count:", rows.length);
+    }
+    if (table === 'interviews') {
+      console.log("[sync] ✅ Upserted interviews count:", rows.length);
+    }
+    
     since = rows[rows.length - 1].updated_at ? Number(rows[rows.length - 1].updated_at) : 0;
     total += rows.length;
+
+    // Verificación post-upsert para sings, tracks e interviews
+    if (['sings', 'tracks', 'interviews'].includes(table)) {
+      const dbConnection = await getDb();
+      const total = await dbConnection.query(`SELECT COUNT(*) as c FROM ${table}`);
+      const byBird = await dbConnection.query(`
+        SELECT bird_id, COUNT(*) as c 
+        FROM ${table} 
+        WHERE deleted_at IS NULL 
+        GROUP BY bird_id 
+        LIMIT 5
+      `);
+
+      console.log(`[sync][verify] ${table} total en SQLite:`, total.values?.[0]?.c);
+      console.log(`[sync][verify] ${table} distribución por bird_id:`, byBird.values);
+      
+      // Conteo directo específico para tracks e interviews
+      if (table === 'tracks') {
+        const { values: count } = await dbConnection.query(`SELECT COUNT(*) as c FROM tracks`);
+        console.log("[sync] 🔍 Total tracks in SQLite:", count?.[0]?.c);
+      }
+      if (table === 'interviews') {
+        const { values: count } = await dbConnection.query(`SELECT COUNT(*) as c FROM interviews`);
+        console.log("[sync] 🔍 Total interviews in SQLite:", count?.[0]?.c);
+      }
+    }
+
+    // Debug específico para tracks e interviews - mostrar filas reales
+    if (table === 'tracks' || table === 'interviews') {
+      const dbConnection = await getDb();
+      const sampleRows = await dbConnection.query(
+        `SELECT id, bird_id, title, audio_url, updated_at, deleted_at 
+         FROM ${table} 
+         WHERE bird_id = 'crotophaga-ani' 
+         LIMIT 5`
+      );
+      console.log(`[sync][DEBUG] ${table}: registros en SQLite para bird_id=crotophaga-ani:`, sampleRows.values);
+    }
 
     // Guardar cursor de sincronización
     await setMetaValue(metaKey, String(since));
     
     console.log(`[sync] 📥 ${table}: +${rows.length} registros (total: ${total})`);
     
+    // Log específico para tracks e interviews
+    if (table === 'tracks') {
+      console.log(`[sync] 🎵 Upsert tracks: ${rows.length} registros procesados`);
+      console.log('[sync] 🎵 Sample track data:', rows.slice(0, 2).map(r => ({ id: r.id, bird_id: r.bird_id, title: r.title })));
+    }
+    if (table === 'interviews') {
+      console.log(`[sync] 🎤 Upsert interviews: ${rows.length} registros procesados`);
+      console.log('[sync] 🎤 Sample interview data:', rows.slice(0, 2).map(r => ({ id: r.id, bird_id: r.bird_id, title: r.title })));
+    }
+    
     if (rows.length < pageSize) break;
+  }
+
+  // 🔥 Limpieza de registros eliminados
+  try {
+    if (['birds', 'tracks', 'interviews', 'sings', 'musicians'].includes(table)) {
+      const db = await getDb();
+      await db.run(`DELETE FROM ${table} WHERE deleted_at IS NOT NULL`);
+      console.log(`[sync][cleanup] Registros eliminados limpiados en ${table}`);
+    }
+  } catch (cleanupError) {
+    console.error(`[sync][cleanup] Error limpiando ${table}:`, cleanupError);
   }
 
   console.log(`[sync] ✅ ${table}: sincronización completada (${total} registros)`);
@@ -234,4 +336,68 @@ export async function pullTableDelta(table: string, pageSize = SYNC_CONFIG.pageS
  */
 export async function pullBirdsDelta(pageSize = SYNC_CONFIG.pageSize): Promise<number> {
   return pullTableDelta('birds', pageSize);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Resync completo de una tabla:
+ * - Borra todos los registros locales
+ * - Trae todo desde Supabase sin delta
+ */
+export async function resyncTable(table: string, pageSize = SYNC_CONFIG.pageSize): Promise<number> {
+  if (!supabase) {
+    console.warn('[resync] supabase no configurado; omito');
+    return 0;
+  }
+
+  const db = await getDb();
+  await db.run(`DELETE FROM ${table}`); // limpiar tabla local
+  await setMetaValue(`${table}_last_sync`, '0'); // resetear cursor
+
+  let total = 0;
+  let lastId = null;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .order('updated_at', { ascending: true })
+      .limit(pageSize);
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    await upsertMany(table, data);
+    total += data.length;
+
+    if (data.length < pageSize) break;
+  }
+
+  console.log(`[resync] ✅ ${table}: repoblada con ${total} registros`);
+  return total;
+}
+
+/**
+ * Resync de todas las tablas del catálogo
+ */
+export async function resyncAllTables(): Promise<void> {
+  for (const table of SYNC_CONFIG.tables) {
+    try {
+      await resyncTable(table);
+    } catch (err) {
+      console.error(`[resync] ❌ Error resync en ${table}`, err);
+    }
+  }
 }

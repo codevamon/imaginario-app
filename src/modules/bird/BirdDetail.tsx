@@ -12,6 +12,10 @@ import {
   IonAccordion,
   IonItem,
   IonLabel,
+  IonCard,
+  IonCardHeader,
+  IonCardTitle,
+  IonCardContent,
   IonIcon,
   IonSpinner,
   IonButton,
@@ -216,6 +220,16 @@ const BirdDetail: React.FC = () => {
       </IonPage>
     );
   }
+
+  // Debug: Verificar datos cargados
+  console.log('[BirdDetail] 🔍 Debug - tracks:', tracks);
+  console.log('[BirdDetail] 🔍 Debug - interviews:', interviews);
+  console.log('[BirdDetail] 🔍 Debug - tracks.length:', tracks.length);
+  console.log('[BirdDetail] 🔍 Debug - interviews.length:', interviews.length);
+  
+  // Verificar si los accordions deberían mostrar contenido
+  console.log('[BirdDetail] 🔍 Should show tracks accordion:', tracks.length > 0);
+  console.log('[BirdDetail] 🔍 Should show interviews accordion:', interviews.length > 0);
 
   return (
     <IonPage>
@@ -436,6 +450,7 @@ const BirdDetail: React.FC = () => {
               )}
             </div>
           </IonAccordion>
+
 
           {/* Música */}
           <IonAccordion value="music">

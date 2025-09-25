@@ -1,4 +1,5 @@
 import { getDb } from '../../sqlite'
+import { toIso, toIsoOrNull } from './utils/dateHelpers'
 
 export type Sing = {
   id: string;
@@ -24,12 +25,13 @@ export async function getSingsByBirdId(birdId: string): Promise<Sing[]> {
       id: row.id,
       bird_id: row.bird_id,
       title: row.title,
-      audio_url: row.audio_url,
+      audio_url: row.audio_url ?? null,
       duration_ms: row.duration_ms,
-      updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
-      deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null
+      updated_at: toIso(row.updated_at),
+      deleted_at: toIsoOrNull(row.deleted_at)
     }));
     
+    console.log('[DAO] getSingsByBirdId mapped:', sings.slice(0, 3));
     return sings;
     
   } catch (error) {
@@ -53,10 +55,10 @@ export async function getSingById(id: string): Promise<Sing | null> {
         id: row.id,
         bird_id: row.bird_id,
         title: row.title,
-        audio_url: row.audio_url,
+        audio_url: row.audio_url ?? null,
         duration_ms: row.duration_ms,
-        updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
-        deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null
+        updated_at: toIso(row.updated_at),
+        deleted_at: toIsoOrNull(row.deleted_at)
       };
     }
     return null;

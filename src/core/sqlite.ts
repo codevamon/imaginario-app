@@ -162,6 +162,46 @@ async function initializeSchema() {
   `)
   console.log('[sqlite] ✅ Tabla sings creada/verificada')
 
+  // Tabla de tracks
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS tracks (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT NOT NULL,
+      title TEXT,
+      audio_url TEXT,
+      duration_ms INTEGER,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla tracks creada/verificada')
+
+  // Tabla de interviews
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS interviews (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT NOT NULL,
+      title TEXT,
+      audio_url TEXT,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla interviews creada/verificada')
+
+  // Tabla de musicians
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS musicians (
+      id TEXT PRIMARY KEY,
+      bird_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      bio TEXT,
+      updated_at INTEGER,
+      deleted_at INTEGER
+    )
+  `)
+  console.log('[sqlite] ✅ Tabla musicians creada/verificada')
+
   // Tabla de imaginarios
   await db.execute(`
     CREATE TABLE IF NOT EXISTS imaginarios (
@@ -229,12 +269,25 @@ export async function closeDb() {
 }
 
 /**
- * Reinicia la base de datos (cierra y vuelve a abrir)
+ * Reinicia la base de datos y limpia todas las tablas sincronizadas
  */
 export async function resetDb() {
   console.log('[sqlite] 🔄 Reiniciando base de datos...')
   await closeDb()
-  return await initDb()
+  const db = await initDb()
+  
+  // Borra todo el contenido de tablas sincronizadas
+  const tables = ['birds', 'bird_images', 'bird_translations', 'sings', 'tracks', 'interviews', 'musicians']
+  for (const t of tables) {
+    await db.run(`DELETE FROM ${t}`)
+  }
+
+  // Borra metadatos de sincronización (para que todo se repoble desde Supabase)
+  await db.run(`DELETE FROM _meta`)
+
+  console.log('[sqlite] ⚡ resetDb completado. Todas las tablas y metadatos están vacíos.')
+  
+  return db
 }
 
 /**

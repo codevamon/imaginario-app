@@ -1,9 +1,10 @@
-import { getDb } from '../../sqlite';
+import { getDb } from '../../sqlite'
+import { toIso, toIsoOrNull } from './utils/dateHelpers'
 
 export type Track = {
   id: string;
   bird_id: string;
-  title: string;
+  title?: string;
   audio_url: string;
   duration_ms?: number;
   updated_at?: string;
@@ -16,24 +17,51 @@ export async function getTracksByBirdId(birdId: string): Promise<Track[]> {
     const result = await db.query(`
       SELECT * FROM tracks 
       WHERE bird_id = ? AND deleted_at IS NULL 
-      ORDER BY updated_at DESC, title COLLATE NOCASE ASC
+      ORDER BY title COLLATE NOCASE ASC, updated_at DESC
     `, [birdId]);
-    
-    // Convertir los resultados al tipo Track
+
     const tracks: Track[] = (result.values || []).map((row: any) => ({
       id: row.id,
       bird_id: row.bird_id,
       title: row.title,
-      audio_url: row.audio_url,
+      audio_url: row.audio_url ?? null,
       duration_ms: row.duration_ms,
-      updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
-      deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null
+      updated_at: toIso(row.updated_at),
+      deleted_at: toIsoOrNull(row.deleted_at)
     }));
-    
+
+    console.log('[DAO] getTracksByBirdId mapped:', tracks.slice(0, 3));
     return tracks;
-    
   } catch (error) {
     console.error('[DAO] getTracksByBirdId error:', error);
     return [];
+  }
+}
+
+export async function getTrackById(id: string): Promise<Track | null> {
+  try {
+    const db = await getDb();
+    const result = await db.query(`
+      SELECT * FROM tracks 
+      WHERE id = ? AND deleted_at IS NULL 
+      LIMIT 1
+    `, [id]);
+
+    if (result.values && result.values.length > 0) {
+      const row = result.values[0];
+      return {
+        id: row.id,
+        bird_id: row.bird_id,
+        title: row.title,
+        audio_url: row.audio_url ?? null,
+        duration_ms: row.duration_ms,
+        updated_at: toIso(row.updated_at),
+        deleted_at: toIsoOrNull(row.deleted_at)
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('[DAO] getTrackById error:', error);
+    return null;
   }
 }

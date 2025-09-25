@@ -1,13 +1,13 @@
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonButton, IonIcon, IonSearchbar, IonItem, IonList,
-  IonSpinner, IonToast, IonChip, IonText
+  IonSpinner, IonToast, IonChip, IonText, IonRefresher, IonRefresherContent
 } from '@ionic/react';
 import { filter, refresh } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import { supabase } from '../../core/supabase';
-import { pullAllTables } from '../../core/sync/pull';
+import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
 import { listBirds, type Bird } from '../../core/db/dao/birds';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -20,6 +20,7 @@ export default function HomePage() {
   const [popular, setPopular] = useState<Bird[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isResyncing, setIsResyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
 
@@ -53,6 +54,23 @@ export default function HomePage() {
       setSyncMessage(`❌ Error crítico: ${error}`);
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  async function handleResync() {
+    if (isResyncing) return;
+    setIsResyncing(true);
+    setSyncMessage('🔄 Resync completo en progreso...');
+    setShowToast(true);
+    try {
+      await resyncAllTables();
+      setSyncMessage('✅ Resync completo terminado');
+      await loadData();
+    } catch (err) {
+      console.error('[HomePage] Error en resync:', err);
+      setSyncMessage(`❌ Error en resync: ${err}`);
+    } finally {
+      setIsResyncing(false);
     }
   }
 
@@ -106,6 +124,9 @@ export default function HomePage() {
             <IonButton onClick={handleSync} disabled={isSyncing}>
               {isSyncing ? <IonSpinner name="crescent" /> : <IonIcon icon={refresh} />}
             </IonButton>
+            <IonButton onClick={handleResync} disabled={isResyncing}>
+              {isResyncing ? <IonSpinner name="crescent" /> : 'Resync'}
+            </IonButton>
             <IonButton onClick={() => setFiltersOpen(v => !v)}>
               <IonIcon icon={filter} />
             </IonButton>
@@ -114,6 +135,18 @@ export default function HomePage() {
       </IonHeader>
 
       <IonContent fullscreen>
+        <IonRefresher slot="fixed" onIonRefresh={async (e) => {
+          await handleResync();
+          e.detail.complete();
+        }}>
+          <IonRefresherContent
+            pullingIcon="arrow-down-circle-outline"
+            refreshingSpinner="crescent"
+            pullingText="Desliza para resync completo"
+            refreshingText="Sincronizando..."
+          />
+        </IonRefresher>
+        
         {/* Saludo */}
         <div style={{ padding: '12px 16px', fontSize: 22, fontWeight: 700 }}>
           Te damos la bienvenida 👋

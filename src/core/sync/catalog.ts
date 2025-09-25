@@ -1,7 +1,7 @@
 // src/core/sync/catalog.ts
 import { supabase } from '../supabase';
 import { upsertMany } from '../db/dao/catalog';
-import { getMetaValue, setMetaValue } from "../sqlite";
+import { getMetaValue, setMetaValue, getDb } from "../sqlite";
 
 export async function pullBirds(pageSize = 200) {
   // 👇 evita crash si no hay envs
@@ -44,5 +44,15 @@ export async function pullBirds(pageSize = 200) {
 
     if (rows.length < pageSize) break;
   }
+
+  // 🔥 Limpieza de aves eliminadas
+  try {
+    const db = await getDb();
+    await db.run(`DELETE FROM birds WHERE deleted_at IS NOT NULL`);
+    console.log('[sync][cleanup] Registros eliminados limpiados en birds');
+  } catch (cleanupError) {
+    console.error('[sync][cleanup] Error limpiando birds:', cleanupError);
+  }
+
   return total;
 }
