@@ -1,0 +1,32 @@
+/* Guide carousel - CSS fallback (horizontal scroll + snap) */
+.guide-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 12px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.guide-card {
+  min-width: 260px;
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(3,36,32,0.06);
+  cursor: pointer;
+  transition: transform .18s ease;
+}
+.guide-card:focus,
+.guide-card:hover { transform: translateY(-6px); outline: none; }
+.guide-image { display:block; width:100%; height:160px; object-fit:cover; }
+.guide-overlay {
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(3,36,32,0.85) 100%);
+  color: #fff;
+  padding: 12px;
+  margin-top: -46px;
+  border-radius: 0 0 12px 12px;
+}
+.guide-name { font-weight: 700; font-size: 16px; }
+.guide-scientific { font-size: 12px; opacity: .9; font-style: italic; margin-top: 4px; }

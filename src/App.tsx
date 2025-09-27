@@ -7,7 +7,7 @@ import {
   IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel,
 } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
-import { triangle, ellipse, square } from 'ionicons/icons';
+import { triangle, ellipse, square, refreshCircle } from 'ionicons/icons';
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
@@ -23,8 +23,11 @@ import HomePage from './modules/home/HomePage';
 import DiscoverPage from './modules/discover/DiscoverPage';
 import BirdDetail from './modules/bird/BirdDetail';
 import ProfilePage from './modules/profile/ProfilePage';
+import SyncCenter from './modules/synccenter/SyncCenter';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
 import { pullAllTables } from './core/sync/pull';
+import './theme/fonts.css';
+import './theme/global.css';
 
 setupIonicReact();
 
@@ -35,6 +38,7 @@ const Tabs: React.FC = () => (
       <Route exact path="/tabs/tab1" component={Tab1} />
       <Route exact path="/tabs/tab2" component={Tab2} />
       <Route exact path="/tabs/tab3" component={Tab3} />
+      <Route exact path="/tabs/synccenter" component={SyncCenter} />
       <Route exact path="/tabs">
         <Redirect to="/tabs/tab1" />
       </Route>
@@ -52,6 +56,10 @@ const Tabs: React.FC = () => (
       <IonTabButton tab="tab3" href="/tabs/tab3">
         <IonIcon aria-hidden="true" icon={square} />
         <IonLabel>Tab 3</IonLabel>
+      </IonTabButton>
+      <IonTabButton tab="synccenter" href="/tabs/synccenter">
+        <IonIcon aria-hidden="true" icon={refreshCircle} />
+        <IonLabel>Sync</IonLabel>
       </IonTabButton>
     </IonTabBar>
   </IonTabs>
@@ -170,6 +178,7 @@ const App: React.FC = () => {
           <Route exact path="/discover" component={DiscoverPage} />
           <Route exact path="/bird/:id" component={BirdDetail} />
           <Route exact path="/profile" component={ProfilePage} />
+          <Route exact path="/synccenter" component={SyncCenter} />
 
           {/* Layout de tabs */}
           <Route path="/tabs" component={Tabs} />

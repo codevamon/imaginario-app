@@ -1,0 +1,35 @@
+/* src/theme/global.css */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&display=swap');
+
+:root {
+  --font-family-base: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+
+  --color-text: #1e1e1e;
+  --color-muted: #6b7280;
+  --color-primary: #2563eb;
+  --color-bg: #ffffff;
+
+  --heading-weight: 700;
+  --body-weight: 400;
+  --radius-md: 12px;
+}
+
+html, body, ion-app, ion-content {
+  font-family: 'Recoleta Alt', 'Recoleta', system-ui, -apple-system, sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4, h5 {
+  font-weight: var(--heading-weight);
+  margin: 0 0 0.5rem;
+}
+
+p {
+  font-weight: var(--body-weight);
+  line-height: 1.5;
+  margin: 0 0 1rem;
+}
+
