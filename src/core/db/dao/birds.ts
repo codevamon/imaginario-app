@@ -1,4 +1,6 @@
 import { getDb } from '../../sqlite'
+import { Capacitor } from '@capacitor/core'
+import { fakeBirds } from '../fakeData'
 
 export type Bird = {
   id: string;
@@ -21,6 +23,12 @@ export async function listBirds(options?: {
   popularity?: 'asc' | 'desc';
   order?: 'name' | 'updated_at';
 }): Promise<Bird[]> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-birds] 🚨 usando datos fake en modo web');
+    return fakeBirds;
+  }
+
   try {
     const db = await getDb();
     
@@ -90,6 +98,12 @@ export async function listBirds(options?: {
 }
 
 export async function getBirdById(id: string): Promise<Bird | null> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-birds] 🚨 usando datos fake en modo web');
+    return fakeBirds.find(bird => bird.id === id) || null;
+  }
+
   try {
     const db = await getDb();
     const result = await db.query('SELECT * FROM birds WHERE id = ? AND deleted_at IS NULL LIMIT 1', [id]);

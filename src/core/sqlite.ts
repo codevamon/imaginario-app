@@ -1,4 +1,5 @@
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite'
+import { Capacitor } from '@capacitor/core'
 
 // Configuración centralizada de la base de datos
 const DB_CONFIG = {
@@ -17,7 +18,24 @@ let schemaInitialized = false
 /**
  * Inicializa la base de datos SQLite con gestión inteligente de conexiones
  */
-export async function initDb() {
+export async function initDb(): Promise<SQLiteDBConnection> {
+  // Verificar si estamos en modo web y usar DB fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[sqlite] 🚨 Modo web: usando DB fake (sin persistencia)')
+    dbInitialized = true
+    schemaInitialized = true
+
+    const fakeDb = {
+      query: async () => ({ values: [] }),
+      run: async () => ({ changes: { changes: 0 } }),
+      execute: async () => ({ changes: { changes: 0 } }),
+      executeSet: async () => ({ changes: { changes: 0 } }),
+    } as unknown as SQLiteDBConnection
+
+    db = fakeDb
+    return db
+  }
+
   console.log('[sqlite] 🚀 Inicializando base de datos (nativo)')
 
   try {
@@ -53,6 +71,7 @@ export async function initDb() {
     }
     
     dbInitialized = true
+    if (!db) throw new Error('[sqlite] ❌ DB not initialized')
     return db
   } catch (err) {
     console.error('[sqlite] ❌ Error inicializando base de datos:', err)
@@ -247,7 +266,9 @@ async function initializeSchema() {
 
 export async function getDb(): Promise<SQLiteDBConnection> {
   if (dbInitialized && db) return db
-  return await initDb()
+  const result = await initDb()
+  if (!result) throw new Error('[sqlite] ❌ DB not initialized')
+  return result
 }
 
 /**
@@ -271,23 +292,33 @@ export async function closeDb() {
 /**
  * Reinicia la base de datos y limpia todas las tablas sincronizadas
  */
-export async function resetDb() {
+export async function resetDb(): Promise<SQLiteDBConnection> {
+  // Verificar si estamos en modo web y ignorar reset
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[sqlite] 🚨 resetDb ignorado en modo web');
+    // Retornar el fake DB que ya está configurado
+    if (!db) throw new Error('[sqlite] ❌ DB not initialized');
+    return db;
+  }
+
   console.log('[sqlite] 🔄 Reiniciando base de datos...')
   await closeDb()
-  const db = await initDb()
+  const newDb = await initDb()
+  
+  if (!newDb) throw new Error('[sqlite] ❌ DB not initialized')
   
   // Borra todo el contenido de tablas sincronizadas
   const tables = ['birds', 'bird_images', 'bird_translations', 'sings', 'tracks', 'interviews', 'musicians']
   for (const t of tables) {
-    await db.run(`DELETE FROM ${t}`)
+    await newDb.run(`DELETE FROM ${t}`)
   }
 
   // Borra metadatos de sincronización (para que todo se repoble desde Supabase)
-  await db.run(`DELETE FROM _meta`)
+  await newDb.run(`DELETE FROM _meta`)
 
   console.log('[sqlite] ⚡ resetDb completado. Todas las tablas y metadatos están vacíos.')
   
-  return db
+  return newDb
 }
 
 /**

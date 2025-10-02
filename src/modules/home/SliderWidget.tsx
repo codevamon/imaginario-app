@@ -1,9 +1,11 @@
 // src/modules/home/SliderWidget.tsx
-import React from 'react';
-import { IonCard, IonCardHeader, IonCardTitle } from '@ionic/react';
+import React, { useEffect, useState } from 'react';
+import { IonText } from '@ionic/react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
+import './SliderWidget.css';
 import type { Bird } from '../../core/db/dao/birds';
+import { getImagesByBirdId } from '../../core/db/dao/bird_images';
 
 type Props = {
   items?: Bird[];
@@ -12,57 +14,88 @@ type Props = {
 };
 
 const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick }) => {
+  const [displayItems, setDisplayItems] = useState<Bird[]>([]);
+
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+
+    // shuffle aleatorio
+    const shuffled = [...items].sort(() => 0.5 - Math.random());
+    const limited = shuffled.slice(0, 9);
+
+    // adjuntar primera imagen desde bird_images si no tienen image_url
+    Promise.all(
+      limited.map(async (bird) => {
+        if (bird.image_url) return bird;
+        try {
+          const imgs = await getImagesByBirdId(bird.id);
+          if (imgs && imgs.length > 0) {
+            return { ...bird, image_url: imgs[0].url };
+          }
+        } catch {
+          return bird;
+        }
+        return bird;
+      })
+    ).then(setDisplayItems);
+  }, [items]);
+
   return (
-    <IonCard>
-      <IonCardHeader>
-        <IonCardTitle>{title}</IonCardTitle>
-      </IonCardHeader>
-
-      <div style={{ padding: 8 }}>
-        <Swiper slidesPerView={1.2} spaceBetween={12} freeMode>
-          {items.map((bird) => (
-            <SwiperSlide key={bird.id}>
-              <div
-                role="button"
-                data-bird-id={bird.id}
-                onClick={() => onItemClick?.(bird.id)}
-                onKeyDown={(e) => { if (e.key === 'Enter') onItemClick?.(bird.id); }}
-                tabIndex={0}
-                style={{
-                  borderRadius: '12px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  overflow: 'hidden',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                  height: 260,
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}
-              >
-                <div style={{ width: '100%', height: 180, position: 'relative', overflow: 'hidden' }}>
-                  {bird.image_url ? (
-                    <img src={bird.image_url} alt={bird.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48 }}>
-                      🐦
-                    </div>
-                  )}
-
-                  <div style={{ position: 'absolute', top: 8, right: 8 }}>
-                    {/* optional rarity chip could be passed via props or computed elsewhere */}
-                  </div>
-                </div>
-
-                <div style={{ padding: 12 }}>
-                  <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{bird.name}</div>
-                  {bird.scientific_name && <div style={{ fontSize: 14, fontStyle: 'italic', color: '#666' }}>{bird.scientific_name}</div>}
-                </div>
-              </div>
-            </SwiperSlide>
-          ))}
-        </Swiper>
+    <div className="slider-widget-i">
+      <div className="in-widget-header _flex">
+        <h2 className="h2-i _rgl primary-i"><span>{title}</span></h2>
+        <button className="btn-i">
+          <span>Ver más</span>
+        </button>
       </div>
-    </IonCard>
+      <div className="in-widget-content _flex-column">
+        <div className="slider-widget">
+          {displayItems && displayItems.length > 0 ? (
+            <Swiper
+              slidesPerView={'auto'}
+              centeredSlides={true}
+              spaceBetween={16}
+              className="slider-widget-swiper"
+            >
+              {displayItems.map((bird) => (
+                <SwiperSlide key={bird.id} className="slider-widget-slide">
+                  <div
+                    role="button"
+                    data-bird-id={bird.id}
+                    onClick={() => onItemClick?.(bird.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') onItemClick?.(bird.id); }}
+                    tabIndex={0}
+                    className="slider-card"
+                  >
+                    <div className="slider-card-image-wrapper">
+                      <img
+                        src={bird.image_url || '/assets/default-bird.svg'}
+                        alt={bird.name}
+                        className="slider-card-image"
+                      />
+                    </div>
+
+                    <div className="slider-card-overlay">
+                      <div className="in-slide">
+                        <div className="h3-i _rgl _capitalize whites">{bird.name}</div>
+                        {bird.scientific_name && (
+                          <div className="h4-i _lgt whites">{bird.scientific_name}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          ) : (
+            <div className="widget-fallback">
+              <img src="/assets/default-bird.svg" alt="Default bird" className="widget-fallback-img" />
+              <IonText className="widget-fallback-text">Contenido no disponible aún</IonText>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

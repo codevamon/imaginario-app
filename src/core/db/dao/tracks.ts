@@ -1,5 +1,7 @@
 import { getDb } from '../../sqlite'
 import { toIso, toIsoOrNull } from './utils/dateHelpers'
+import { Capacitor } from '@capacitor/core'
+import { fakeTracks } from '../fakeData'
 
 export type Track = {
   id: string;
@@ -12,6 +14,12 @@ export type Track = {
 };
 
 export async function getTracksByBirdId(birdId: string): Promise<Track[]> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-tracks] 🚨 usando datos fake en modo web');
+    return fakeTracks.filter(track => track.bird_id === birdId);
+  }
+
   try {
     const db = await getDb();
     const result = await db.query(`
@@ -39,6 +47,12 @@ export async function getTracksByBirdId(birdId: string): Promise<Track[]> {
 }
 
 export async function getTrackById(id: string): Promise<Track | null> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-tracks] 🚨 usando datos fake en modo web');
+    return fakeTracks.find(track => track.id === id) || null;
+  }
+
   try {
     const db = await getDb();
     const result = await db.query(`

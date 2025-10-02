@@ -1,0 +1,34 @@
+.about-widget-i {
+  position: relative;
+}
+
+.about-widget-i .about-card-i {
+  position: relative;
+  border-radius: 4vw;
+  overflow: hidden;
+}
+
+.about-widget-i .about-card-i .about-card-image-wrapper {
+  position: relative;
+  z-index: 0;
+  margin-bottom: -10%;
+  width: 100%;
+  height: 280px;
+}
+
+.about-widget-i .about-card-i .about-card-body {
+  position: relative;
+  z-index: 1;
+  background: #FDFDE2;
+  padding: 5%;
+}
+
+.about-widget-i .about-card-i .about-card-image-wrapper img {
+  width: 100%;
+  object-fit: cover;
+  height: 100%;
+}
+
+.about-widget-i .in-widget-content {
+  padding: 0 5vw 5vw;
+}

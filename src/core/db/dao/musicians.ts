@@ -1,4 +1,6 @@
 import { getDb } from '../../sqlite';
+import { Capacitor } from '@capacitor/core';
+import { fakeMusicians } from '../fakeData';
 
 export type Musician = {
   id: string;
@@ -10,6 +12,12 @@ export type Musician = {
 };
 
 export async function getMusiciansByBirdId(birdId: string): Promise<Musician[]> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-musicians] 🚨 usando datos fake en modo web');
+    return fakeMusicians.filter(musician => musician.bird_id === birdId);
+  }
+
   try {
     const db = await getDb();
     console.log('[DAO] 🎭 getMusiciansByBirdId - birdId:', birdId);

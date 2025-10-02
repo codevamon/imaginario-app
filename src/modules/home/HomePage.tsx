@@ -9,15 +9,23 @@ import { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
 import { listBirds, type Bird } from '../../core/db/dao/birds';
+import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
+import { getSingsByBirdId, type Sing } from '../../core/db/dao/sings';
 
 import SliderWidget from './SliderWidget';
+import WelcomeWidget from './WelcomeWidget';
+import TracksWidget from './TracksWidget';
+import SingsWidget from './SingsWidget';
 import 'swiper/css';
+import AboutWidget from './AboutWidget';
 
 export default function HomePage() {
   const router = useIonRouter();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [featured, setFeatured] = useState<Bird[]>([]);
   const [popular, setPopular] = useState<Bird[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [sings, setSings] = useState<Sing[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
@@ -129,6 +137,31 @@ export default function HomePage() {
 
       setFeatured((fWithImages || []).slice(0, 8));
       setPopular((pWithImages || []).slice(0, 8));
+      
+      // Cargar tracks de muestra
+      const sampleTracks: Track[] = [];
+      try {
+        if (fWithImages.length > 0) {
+          const t = await getTracksByBirdId(fWithImages[0].id);
+          sampleTracks.push(...t);
+        }
+      } catch (err) {
+        console.warn('[HomePage] no se pudieron traer tracks', err);
+      }
+      setTracks(sampleTracks.slice(0, 3));
+      
+      // Cargar sings de muestra
+      const sampleSings: Sing[] = [];
+      try {
+        if (fWithImages.length > 0) {
+          const s = await getSingsByBirdId(fWithImages[0].id);
+          sampleSings.push(...s);
+        }
+      } catch (err) {
+        console.warn('[HomePage] no se pudieron traer sings', err);
+      }
+      setSings(sampleSings.slice(0, 3));
+      
       console.log('[HomePage] ✅ Datos cargados desde SQLite local (con imágenes adjuntas)');
     } catch (error) {
       console.error('[HomePage] ❌ Error cargando datos desde SQLite:', error);
@@ -159,24 +192,10 @@ export default function HomePage() {
 
   return (
     <IonPage>
-      <IonHeader collapse="fade">
-        <IonToolbar>
-          <IonTitle>Home</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={handleSync} disabled={isSyncing}>
-              {isSyncing ? <IonSpinner name="crescent" /> : <IonIcon icon={refresh} />}
-            </IonButton>
-            <IonButton onClick={handleResync} disabled={isResyncing}>
-              {isResyncing ? <IonSpinner name="crescent" /> : 'Resync'}
-            </IonButton>
-            <IonButton onClick={() => setFiltersOpen(v => !v)}>
-              <IonIcon icon={filter} />
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
 
       <IonContent fullscreen>
+        <WelcomeWidget />
+
         <IonRefresher slot="fixed" onIonRefresh={async (e) => { await handleResync(); e.detail.complete(); }}>
           <IonRefresherContent
             pullingIcon="arrow-down-circle-outline"
@@ -195,25 +214,18 @@ export default function HomePage() {
           </div>
         ) : (
           <>
-            <div style={{ padding: '0 16px 8px' }}>
-              <IonTitle style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
-                Favoritos de la semana
-              </IonTitle>
-            </div>
-
-            <div style={{ padding: '0 8px 24px' }}>
-              <SliderWidget items={featured} title="Favoritos de la semana" onItemClick={(id: string) => router.push(`/bird/${id}`)} />
-            </div>
-
-            <div style={{ padding: '0 16px 8px' }}>
-              <IonTitle style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
-                Aves populares
-              </IonTitle>
-            </div>
-
-            <div style={{ padding: '0 8px 24px' }}>
-              <SliderWidget items={popular} title="Aves populares" onItemClick={(id: string) => router.push(`/bird/${id}`)} />
-            </div>
+            <SliderWidget items={featured} title="Guía de Aves" onItemClick={(id: string) => router.push(`/bird/${id}`)} />
+            <SingsWidget
+              items={sings}
+              title="Explora los cantos"
+              onItemClick={(id: string) => console.log('play sing', id)}
+            />
+            <TracksWidget
+              items={tracks}
+              title="Explorar por su música"
+              onItemClick={(id: string) => console.log('play track', id)}
+            />
+            <AboutWidget />
           </>
         )}
 

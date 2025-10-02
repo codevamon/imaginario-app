@@ -1,5 +1,7 @@
 import { getDb } from '../../sqlite'
 import { toIso, toIsoOrNull } from './utils/dateHelpers'
+import { Capacitor } from '@capacitor/core'
+import { fakeInterviews } from '../fakeData'
 
 export type Interview = {
   id: string;
@@ -12,6 +14,12 @@ export type Interview = {
 };
 
 export async function getInterviewsByBirdId(birdId: string): Promise<Interview[]> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-interviews] 🚨 usando datos fake en modo web');
+    return fakeInterviews.filter(interview => interview.bird_id === birdId);
+  }
+
   try {
     const db = await getDb();
     const result = await db.query(`
@@ -39,6 +47,12 @@ export async function getInterviewsByBirdId(birdId: string): Promise<Interview[]
 }
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-interviews] 🚨 usando datos fake en modo web');
+    return fakeInterviews.find(interview => interview.id === id) || null;
+  }
+
   try {
     const db = await getDb();
     const result = await db.query(`
