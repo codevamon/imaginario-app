@@ -100,14 +100,11 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
                   {sing.author && (
                     <div className="track-card-subtitle">{sing.author}</div>
                   )}
-                  <IonText color="medium">
+                  <div className="l2-i _rgl primary-i">
                     {[
-                      sing.community,
-                      sing.instruments,
-                      sing.interpreters,
                       sing.author
                     ].filter(Boolean).join(' | ')}
-                  </IonText>
+                  </div>
                 </div>
 
                 {/* Audio oculto */}

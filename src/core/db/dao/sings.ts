@@ -93,3 +93,19 @@ export async function getSingById(id: string): Promise<Sing | null> {
     return null;
   }
 }
+
+export async function getAllSings(): Promise<Sing[]> {
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-sings] usando fakeSings en modo web (getAllSings)');
+    return fakeSings;
+  }
+
+  const db = await getDb();
+  const result = await db.query(`
+    SELECT * FROM sings
+    WHERE deleted_at IS NULL
+    ORDER BY updated_at DESC
+    LIMIT 20
+  `);
+  return result.values as Sing[];
+}

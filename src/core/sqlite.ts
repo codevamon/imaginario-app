@@ -222,6 +222,14 @@ async function initializeSchema() {
 
   try {
     await db?.execute(`
+      ALTER TABLE sings ADD COLUMN author TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna sings.author ya existía');
+  }
+
+  try {
+    await db?.execute(`
       ALTER TABLE tracks ADD COLUMN community TEXT;
     `);
   } catch (e) {

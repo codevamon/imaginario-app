@@ -10,7 +10,7 @@ import { useIonRouter } from '@ionic/react';
 import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
 import { listBirds, type Bird } from '../../core/db/dao/birds';
 import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
-import { getSingsByBirdId, type Sing } from '../../core/db/dao/sings';
+import { getAllSings, type Sing } from '../../core/db/dao/sings';
 
 import SliderWidget from './SliderWidget';
 import WelcomeWidget from './WelcomeWidget';
@@ -151,16 +151,14 @@ export default function HomePage() {
       setTracks(sampleTracks.slice(0, 3));
       
       // Cargar sings de muestra
-      const sampleSings: Sing[] = [];
       try {
-        if (fWithImages.length > 0) {
-          const s = await getSingsByBirdId(fWithImages[0].id);
-          sampleSings.push(...s);
-        }
+        const s = await getAllSings();
+        console.warn('[home] cargados', s.length, 'sings');
+        setSings(s);
       } catch (err) {
         console.warn('[HomePage] no se pudieron traer sings', err);
+        setSings([]);
       }
-      setSings(sampleSings.slice(0, 3));
       
       console.log('[HomePage] ✅ Datos cargados desde SQLite local (con imágenes adjuntas)');
     } catch (error) {
