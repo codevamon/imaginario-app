@@ -428,7 +428,7 @@ body.dark ._btn._1._light>._real svg path {
 
   .h2-i,
   .h2-i * {
-    font-size: 7vw;   /* ajustado de title-2 */
+    font-size: 2.5vw;   /* ajustado de title-2 */
     line-height: 0.9;
   }
 
@@ -609,7 +609,7 @@ body.dark ._btn._1._light>._real svg path {
 
   .h2-i,
   .h2-i * {
-    font-size: 8vw;   /* más compacto */
+    font-size: 3.2vw;   /* más compacto */
     line-height: 0.95;
   }
 

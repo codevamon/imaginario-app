@@ -243,7 +243,11 @@ export async function pullTableDelta(table: string, pageSize = SYNC_CONFIG.pageS
         ...baseRow,
         title: row.title ?? null,
         audio_url: row.audio_url ?? null,
-        duration_ms: row.duration_ms ?? null
+        duration_ms: row.duration_ms ?? null,
+        community: row.community ?? null,
+        instruments: row.instruments ?? null,
+        interpreters: row.interpreters ?? null,
+        author: row.author ?? null
       };
     });
 

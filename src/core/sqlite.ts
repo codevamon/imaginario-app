@@ -195,6 +195,55 @@ async function initializeSchema() {
   `)
   console.log('[sqlite] ✅ Tabla tracks creada/verificada')
 
+  // ===== Migración: agregar columnas de metadatos a sings y tracks =====
+  try {
+    await db?.execute(`
+      ALTER TABLE sings ADD COLUMN community TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna sings.community ya existía');
+  }
+
+  try {
+    await db?.execute(`
+      ALTER TABLE sings ADD COLUMN instruments TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna sings.instruments ya existía');
+  }
+
+  try {
+    await db?.execute(`
+      ALTER TABLE sings ADD COLUMN interpreters TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna sings.interpreters ya existía');
+  }
+
+  try {
+    await db?.execute(`
+      ALTER TABLE tracks ADD COLUMN community TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna tracks.community ya existía');
+  }
+
+  try {
+    await db?.execute(`
+      ALTER TABLE tracks ADD COLUMN instruments TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna tracks.instruments ya existía');
+  }
+
+  try {
+    await db?.execute(`
+      ALTER TABLE tracks ADD COLUMN interpreters TEXT;
+    `);
+  } catch (e) {
+    console.log('[sqlite] ℹ️ Columna tracks.interpreters ya existía');
+  }
+
   // Tabla de interviews
   await db.execute(`
     CREATE TABLE IF NOT EXISTS interviews (

@@ -11,6 +11,10 @@ export type Track = {
   duration_ms?: number;
   updated_at?: string;
   deleted_at?: string | null;
+  community?: string;
+  instruments?: string;
+  interpreters?: string;
+  author?: string;
 };
 
 export async function getTracksByBirdId(birdId: string): Promise<Track[]> {
@@ -35,7 +39,11 @@ export async function getTracksByBirdId(birdId: string): Promise<Track[]> {
       audio_url: row.audio_url ?? null,
       duration_ms: row.duration_ms,
       updated_at: toIso(row.updated_at),
-      deleted_at: toIsoOrNull(row.deleted_at)
+      deleted_at: toIsoOrNull(row.deleted_at),
+      community: row.community,
+      instruments: row.instruments,
+      interpreters: row.interpreters,
+      author: row.author
     }));
 
     console.log('[DAO] getTracksByBirdId mapped:', tracks.slice(0, 3));
@@ -70,7 +78,11 @@ export async function getTrackById(id: string): Promise<Track | null> {
         audio_url: row.audio_url ?? null,
         duration_ms: row.duration_ms,
         updated_at: toIso(row.updated_at),
-        deleted_at: toIsoOrNull(row.deleted_at)
+        deleted_at: toIsoOrNull(row.deleted_at),
+        community: row.community,
+        instruments: row.instruments,
+        interpreters: row.interpreters,
+        author: row.author
       };
     }
     return null;

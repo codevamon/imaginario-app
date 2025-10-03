@@ -1,7 +1,7 @@
 // src/modules/home/SingsWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { play, pause } from 'ionicons/icons';
-import { IonIcon } from '@ionic/react';
+import { IonIcon, IonText } from '@ionic/react';
 import type { Sing } from '../../core/db/dao/sings';
 
 type Props = {
@@ -47,11 +47,19 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
 
   return (
     <div className="tracks-widget-i">
-      <div className="in-widget-header _flex">
-        <h2 className="h2-i _rgl primary-i"><span>{title}</span></h2>
-        <button className="btn-i">
-          <span>Ver más</span>
-        </button>
+      <div className="in-widget-header">
+        <div className="_flex">
+          <div className="_base _1">
+            <h2 className="h2-i _rgl primary-i">
+              <span>{title}</span>
+            </h2>
+          </div>
+          <div className="_base _2">
+            <button className="btn-i">
+              <span>Ver más</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="in-widget-content">
@@ -89,9 +97,17 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
 
                 <div className="track-card-info">
                   <div className="track-card-title">{sing.title || 'Canto sin título'}</div>
-                  {sing.bird_id && (
-                    <div className="track-card-subtitle">{sing.bird_id}</div>
+                  {sing.author && (
+                    <div className="track-card-subtitle">{sing.author}</div>
                   )}
+                  <IonText color="medium">
+                    {[
+                      sing.community,
+                      sing.instruments,
+                      sing.interpreters,
+                      sing.author
+                    ].filter(Boolean).join(' | ')}
+                  </IonText>
                 </div>
 
                 {/* Audio oculto */}

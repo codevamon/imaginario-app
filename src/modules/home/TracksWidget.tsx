@@ -1,7 +1,7 @@
 // src/modules/home/TracksWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { play, pause } from 'ionicons/icons';
-import { IonIcon } from '@ionic/react';
+import { IonIcon, IonText } from '@ionic/react';
 import type { Track } from '../../core/db/dao/tracks';
 import './TracksWidget.css';
 
@@ -48,11 +48,19 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos
 
   return (
     <div className="tracks-widget-i">
-      <div className="in-widget-header _flex">
-        <h2 className="h2-i _rgl primary-i"><span>{title}</span></h2>
-        <button className="btn-i">
-          <span>Ver más</span>
-        </button>
+      <div className="in-widget-header ">
+        <div className="_flex">
+          <div className="_base _1">
+            <h2 className="h2-i _rgl primary-i">
+              <span>{title}</span>
+            </h2>
+          </div>
+          <div className="_base _2">
+            <button className="btn-i">
+              <span>Ver más</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="in-widget-content">
@@ -89,10 +97,17 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos
                 </button>
 
                 <div className="track-card-info">
-                  <div className="track-card-title">{track.title}</div>
-                  {track.bird_id && (
-                    <div className="track-card-subtitle" style={{ display: 'none' }}>{track.bird_id}</div>
+                  <div className="track-card-title h3-i _rgl primary-i">{track.title}</div>
+                  {track.interpreters && (
+                    <IonText color="medium">{track.interpreters}</IonText>
                   )}
+                  <div className="l2-i _rgl primary-i">
+                    {[
+                      track.community,
+                      track.instruments,
+                      track.author
+                    ].filter(Boolean).join(' | ')}
+                  </div>
                 </div>
 
                 {/* Audio oculto */}

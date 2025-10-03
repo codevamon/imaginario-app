@@ -42,11 +42,19 @@ const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick
 
   return (
     <div className="slider-widget-i">
-      <div className="in-widget-header _flex">
-        <h2 className="h2-i _rgl primary-i"><span>{title}</span></h2>
-        <button className="btn-i">
-          <span>Ver más</span>
-        </button>
+      <div className="in-widget-header">
+        <div className="_flex">
+          <div className="_base _1">
+            <h2 className="h2-i _rgl primary-i">
+              <span>{title}</span>
+            </h2>
+          </div>
+          <div className="_base _2">
+            <button className="btn-i">
+              <span>Ver más</span>
+            </button>
+          </div>
+        </div>
       </div>
       <div className="in-widget-content _flex-column">
         <div className="slider-widget">

@@ -6,10 +6,16 @@ import './AboutWidget.css';
 const AboutWidget: React.FC = () => {
   return (
     <div className="about-widget-i">
-      <div className="in-widget-header _flex">
-        <h2 className="h2-i _rgl primary-i">
-          <span>Acerca del proyecto</span>
-        </h2>
+      <div className="in-widget-header ">
+        <div className="_flex">
+          <div className="_base _1">
+            <h2 className="h2-i _rgl primary-i">
+              <span>Acerca del proyecto</span>
+            </h2>
+          </div>
+          <div className="_base _2">
+          </div>
+        </div>
       </div>
 
       <div className="in-widget-content">

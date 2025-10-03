@@ -112,9 +112,30 @@ p {
 
 /* BUTTONS */
   button.btn-i {
-    border-radius: 5vw;
-    padding: 0.5vw 4vw;
-    line-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9vw;
+  }
+  @media(max-width:1199px) and (min-width:992px) {
+    button.btn-i {
+      padding: 1vw 2vw;
+    }
+  }
+  @media(max-width:991px) and (min-width:768px) {
+    button.btn-i {
+      padding: 1vw 2vw;
+    }
+  }
+  @media(max-width:767px) and (min-width:576px) {
+    button.btn-i {
+      padding: 2vw 4vw;
+    }
+  }
+  @media(max-width:575px){
+    button.btn-i {
+      padding: 2vw 4vw;
+    }
   }
 /* END BUTTONS */
 
@@ -129,6 +150,21 @@ p {
     grid-gap: 2vw;
     justify-content: space-between;
     padding: 5vw 5vw 3vw;
+  }
+  .in-widget-header>._flex {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .in-widget-header>._flex ._base._1 {
+    width: 60%;
+  }
+
+  .in-widget-header>._flex ._base._2 {
+    width: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: end;
   }
 /* END WIDGETS */
 

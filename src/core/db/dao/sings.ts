@@ -1,5 +1,7 @@
 import { getDb } from '../../sqlite'
 import { toIso, toIsoOrNull } from './utils/dateHelpers'
+import { Capacitor } from '@capacitor/core'
+import { fakeSings } from '../fakeData'
 
 export type Sing = {
   id: string;
@@ -9,9 +11,19 @@ export type Sing = {
   duration_ms?: number;
   updated_at?: string;
   deleted_at?: string | null;
+  community?: string;
+  instruments?: string;
+  interpreters?: string;
+  author?: string;
 };
 
 export async function getSingsByBirdId(birdId: string): Promise<Sing[]> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-sings] 🚨 usando datos fake en modo web');
+    return fakeSings.filter(sing => sing.bird_id === birdId);
+  }
+
   try {
     const db = await getDb();
     const result = await db.query(`
@@ -28,7 +40,11 @@ export async function getSingsByBirdId(birdId: string): Promise<Sing[]> {
       audio_url: row.audio_url ?? null,
       duration_ms: row.duration_ms,
       updated_at: toIso(row.updated_at),
-      deleted_at: toIsoOrNull(row.deleted_at)
+      deleted_at: toIsoOrNull(row.deleted_at),
+      community: row.community,
+      instruments: row.instruments,
+      interpreters: row.interpreters,
+      author: row.author
     }));
     
     console.log('[DAO] getSingsByBirdId mapped:', sings.slice(0, 3));
@@ -41,6 +57,12 @@ export async function getSingsByBirdId(birdId: string): Promise<Sing[]> {
 }
 
 export async function getSingById(id: string): Promise<Sing | null> {
+  // Verificar si estamos en modo web y usar datos fake
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-sings] 🚨 usando datos fake en modo web');
+    return fakeSings.find(sing => sing.id === id) || null;
+  }
+
   try {
     const db = await getDb();
     const result = await db.query(`
@@ -58,7 +80,11 @@ export async function getSingById(id: string): Promise<Sing | null> {
         audio_url: row.audio_url ?? null,
         duration_ms: row.duration_ms,
         updated_at: toIso(row.updated_at),
-        deleted_at: toIsoOrNull(row.deleted_at)
+        deleted_at: toIsoOrNull(row.deleted_at),
+        community: row.community,
+        instruments: row.instruments,
+        interpreters: row.interpreters,
+        author: row.author
       };
     }
     return null;
