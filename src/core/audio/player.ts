@@ -1,11 +1,74 @@
 // src/core/audio/player.ts
 // Robust AudioManager singleton: controla 1 <audio> global, normaliza URLs y maneja errores.
 type OnChangeCb = (playingId: string | null) => void;
+type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
+
+interface ProgressData {
+  currentTime: number;
+  duration: number;
+  progress: number;
+}
 
 class AudioManager {
   private audio: HTMLAudioElement | null = null;
   private playingId: string | null = null;
   private cbs: OnChangeCb[] = [];
+  private progressCbs: OnProgressCb[] = [];
+  private animationFrameId: number | null = null;
+  private lastProgressUpdate: number = 0;
+
+  private startProgressLoop() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+
+    const updateProgress = (timestamp: number) => {
+      // Throttle: actualizar máximo cada 100ms para optimizar rendimiento
+      if (timestamp - this.lastProgressUpdate < 100) {
+        this.animationFrameId = requestAnimationFrame(updateProgress);
+        return;
+      }
+
+      this.lastProgressUpdate = timestamp;
+
+      if (!this.audio || this.audio.paused || this.audio.ended) {
+        this.animationFrameId = null;
+        return;
+      }
+
+      try {
+        const currentTime = this.audio.currentTime || 0;
+        const duration = this.audio.duration || 0;
+        const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+        // Emitir eventos de progreso
+        this.progressCbs.forEach(cb => {
+          try {
+            cb(currentTime, duration, progress);
+          } catch (e) {
+            console.warn('[AudioManager] onProgress callback failed:', e);
+          }
+        });
+
+        // Continuar el loop si sigue reproduciéndose
+        if (!this.audio.paused && !this.audio.ended) {
+          this.animationFrameId = requestAnimationFrame(updateProgress);
+        }
+      } catch (error) {
+        console.warn('[AudioManager] Progress update error:', error);
+        this.animationFrameId = null;
+      }
+    };
+
+    this.animationFrameId = requestAnimationFrame(updateProgress);
+  }
+
+  private stopProgressLoop() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
 
   private normalizeSrc(src: string): string {
     // Si ya es una URL completa, dejarla como está
@@ -36,13 +99,15 @@ class AudioManager {
     return location.origin + '/' + src;
   }
 
-  private async checkUrlExists(url: string): Promise<boolean> {
+  async checkUrlExists(url: string) {
     try {
-      const response = await fetch(url, { method: 'HEAD' });
-      return response.ok;
-    } catch (e) {
-      console.warn('[AudioManager] URL check failed:', url, e);
-      return false;
+      if (!url) return false;
+      // 🔹 Bypass CORS y HEAD requests
+      console.warn('[AudioManager] Skipping HEAD request (dev mode bypass)');
+      return true;
+    } catch (err) {
+      console.warn('[AudioManager] URL check skipped (CORS):', err);
+      return true;
     }
   }
 
@@ -67,6 +132,7 @@ class AudioManager {
     if (this.playingId === id) {
       if (this.audio && !this.audio.paused) {
         this.audio.pause();
+        this.stopProgressLoop();
         this.setPlaying(null);
         console.log('[AudioManager] paused current track:', id);
       } else if (this.audio) {
@@ -75,6 +141,7 @@ class AudioManager {
           this.setPlaying(null);
         });
         this.setPlaying(id);
+        this.startProgressLoop();
         console.log('[AudioManager] resumed track:', id);
       }
       return;
@@ -84,6 +151,7 @@ class AudioManager {
     if (this.audio) {
       try { 
         this.audio.pause(); 
+        this.stopProgressLoop();
         this.audio.src = '';
         this.audio.removeAttribute('src');
         this.audio.load();
@@ -96,12 +164,18 @@ class AudioManager {
     this.audio = this.audio ?? document.createElement('audio');
     this.audio.src = normalizedSrc;
     this.audio.preload = 'metadata';
+    
+    // Exponer el elemento global para acceso desde hooks
+    (window as any).__IMAGINARIO_AUDIO__ = this.audio;
+    
     this.audio.onended = () => {
       console.log('[AudioManager] track ended:', id);
+      this.stopProgressLoop();
       this.setPlaying(null);
     };
     this.audio.onerror = (e) => {
       console.warn('[AudioManager] audio error:', e, 'for src:', normalizedSrc);
+      this.stopProgressLoop();
       this.setPlaying(null);
     };
 
@@ -109,6 +183,7 @@ class AudioManager {
     try {
       await this.audio.play();
       this.setPlaying(id);
+      this.startProgressLoop();
       console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
     } catch (e) {
       console.warn('[AudioManager] play failed:', e, 'for src:', normalizedSrc);
@@ -120,6 +195,7 @@ class AudioManager {
     if (!this.audio) return;
     try {
       this.audio.pause();
+      this.stopProgressLoop();
       this.setPlaying(null);
       console.log('[AudioManager] paused');
     } catch (e) {
@@ -140,6 +216,25 @@ class AudioManager {
   onChange(cb: OnChangeCb) {
     this.cbs.push(cb);
     return () => { this.cbs = this.cbs.filter(x => x !== cb); };
+  }
+
+  onProgress(cb: OnProgressCb) {
+    this.progressCbs.push(cb);
+    return () => { this.progressCbs = this.progressCbs.filter(x => x !== cb); };
+  }
+
+  getCurrentTime(): number {
+    return this.audio?.currentTime || 0;
+  }
+
+  getDuration(): number {
+    return this.audio?.duration || 0;
+  }
+
+  getProgress(): number {
+    const currentTime = this.getCurrentTime();
+    const duration = this.getDuration();
+    return duration > 0 ? (currentTime / duration) * 100 : 0;
   }
 
   private setPlaying(id: string | null) {

@@ -1,8 +1,11 @@
 // src/modules/home/SingsWidget.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { play, pause } from 'ionicons/icons';
 import { IonIcon, IonText } from '@ionic/react';
 import type { Sing } from '../../core/db/dao/sings';
+import { audioManager } from '../../core/audio/player';
+import { useAudioProgress } from '../../core/audio/useAudioProgress';
+import './SingsWidget.css';
 
 type Props = {
   items?: Sing[];
@@ -10,9 +13,102 @@ type Props = {
   onItemClick?: (id: string) => void;
 };
 
+// Subcomponente para cada tarjeta de sing individual
+interface SingCardProps {
+  sing: Sing;
+  isPlaying: boolean;
+  onToggle: (id: string, url: string) => void;
+}
+
+const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
+  const { progress, currentTime, duration } = useAudioProgress(isPlaying);
+
+  const formatTime = (sec?: number) => {
+    if (!sec || isNaN(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <li
+      className="track-card-i _flex"
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        onToggle(sing.id, sing.audio_url!);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          onToggle(sing.id, sing.audio_url!);
+        }
+      }}
+    >
+      <button
+        className="track-card-icon"
+        onClick={(e) => {
+          e.stopPropagation(); // evita duplicar el click
+          onToggle(sing.id, sing.audio_url!);
+        }}
+      >
+        <IonIcon
+          icon={isPlaying ? pause : play}
+          className={`track-icon ${isPlaying ? 'playing' : ''}`}
+        />
+      </button>
+
+      <div className="track-card-info">
+        <div className="in-track-card-info">
+          <div className="track-card-title">{sing.title || 'Canto sin título'}</div>
+          {sing.author && (
+            <div className="track-card-subtitle">{sing.author}</div>
+          )}
+          <div className="l2-i _rgl primary-i">
+            {[
+              sing.community,
+              sing.instruments,
+              sing.author
+            ].filter(Boolean).join(' | ')}
+          </div>
+        </div>
+         <div className={`track-card-accordion ${isPlaying ? 'open' : ''}`}>
+           <div className="in-track-card-progress">
+             <div className="track-progress-bar" aria-label="progreso de reproducción">
+               <div
+                 className={`track-progress-fill ${isPlaying ? 'active' : ''}`}
+                 style={{ width: `${progress.toFixed(2)}%` }}
+               />
+             </div>
+             <div className="track-progress-time">
+               <div className="in-track-card-progress-time">
+                 <span className="track-progress-time-current">{formatTime(currentTime)}</span>
+                 <span className="track-progress-time-duration">{formatTime(duration)}</span>
+               </div>
+             </div>
+           </div>
+         </div>
+      </div>
+
+
+    </li>
+  );
+};
+
 const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos', onItemClick }) => {
   const [playingSing, setPlayingSing] = useState<string | null>(null);
   const [displaySings, setDisplaySings] = useState<Sing[]>([]);
+
+  // Suscribirse a cambios del audioManager
+  useEffect(() => {
+    const unsubscribe = audioManager.onChange((playingId) => {
+      setPlayingSing(playingId);
+    });
+    
+    // Establecer el estado inicial
+    setPlayingSing(audioManager.getPlayingId());
+    
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (!items || items.length === 0) return;
@@ -22,27 +118,8 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
   }, [items]);
 
   const handlePlaySing = (singId: string, url: string) => {
-    const audio = document.getElementById(`audio-${singId}`) as HTMLAudioElement;
-
-    if (!audio) return;
-
-    // Pausar el sing actual si es otro
-    if (playingSing && playingSing !== singId) {
-      const currentAudio = document.getElementById(`audio-${playingSing}`) as HTMLAudioElement;
-      if (currentAudio) {
-        currentAudio.pause();
-      }
-    }
-
-    if (playingSing === singId) {
-      // Pausar el actual
-      audio.pause();
-      setPlayingSing(null);
-    } else {
-      // Reproducir el nuevo
-      audio.play();
-      setPlayingSing(singId);
-    }
+    audioManager.toggle(singId, url);
+    onItemClick?.(singId);
   };
 
   return (
@@ -66,56 +143,12 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
         {displaySings && displaySings.length > 0 ? (
           <ul className="track-list-i">
             {displaySings.map((sing) => (
-              <li
+              <SingCard
                 key={sing.id}
-                className="track-card-i _flex"
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  handlePlaySing(sing.id, sing.audio_url!);
-                  onItemClick?.(sing.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handlePlaySing(sing.id, sing.audio_url!);
-                    onItemClick?.(sing.id);
-                  }
-                }}
-              >
-                <button
-                  className="track-card-icon"
-                  onClick={(e) => {
-                    e.stopPropagation(); // evita duplicar el click
-                    handlePlaySing(sing.id, sing.audio_url!);
-                  }}
-                >
-                  <IonIcon
-                    icon={playingSing === sing.id ? pause : play}
-                    className={`track-icon ${playingSing === sing.id ? 'playing' : ''}`}
-                  />
-                </button>
-
-                <div className="track-card-info">
-                  <div className="track-card-title">{sing.title || 'Canto sin título'}</div>
-                  {sing.author && (
-                    <div className="track-card-subtitle">{sing.author}</div>
-                  )}
-                  <div className="l2-i _rgl primary-i">
-                    {[
-                      sing.author
-                    ].filter(Boolean).join(' | ')}
-                  </div>
-                </div>
-
-                {/* Audio oculto */}
-                <audio
-                  id={`audio-${sing.id}`}
-                  src={sing.audio_url || ''}
-                  preload="none"
-                  onEnded={() => setPlayingSing(null)}
-                  style={{ display: 'none' }}
-                />
-              </li>
+                sing={sing}
+                isPlaying={playingSing === sing.id}
+                onToggle={handlePlaySing}
+              />
             ))}
           </ul>
         ) : (
