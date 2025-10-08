@@ -1,0 +1,80 @@
+.footbar {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.footbar-inner {
+  background-color: #073A35;
+  border-radius: 50px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  width: 95%;
+  max-width: 500px;
+  padding: 10px 0;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+}
+
+.footbar-item {
+  text-align: center;
+  color: #fff;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: color 0.3s ease;
+  cursor: pointer;
+  border-radius: 20px;
+}
+
+.footbar-item .icon {
+  margin-bottom: 1vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.footbar-item.active {
+  color: #B6DB78;
+}
+
+.footbar-item:active {
+  opacity: 0.8;
+}
+
+.icon-placeholder {
+  width: 24px;
+  height: 24px;
+  background-color: currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+
+.footbar-item .icon svg {
+  width: 6vw;
+  height: 6vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-home.footbar-item.active svg path,
+.item-discover.footbar-item.active svg circle.pupila,
+.item-music.footbar-item.active .icon svg path.boquilla,
+.item-music.footbar-item.active .icon svg path.otro,
+.item-music.footbar-item.active .icon svg ellipse {
+  fill: #B6DB78 !important;
+}
+.item-music.footbar-item.active .icon svg path.palo,
+.item-discover.footbar-item.active svg path,
+.item-about.footbar-item.active .icon svg path{
+  stroke: #B6DB78;
+  fill: transparent;
+}

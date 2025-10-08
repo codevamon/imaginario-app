@@ -10,13 +10,311 @@ const DB_CONFIG = {
   readonly: false
 } as const;
 
+// Versión actual del esquema de base de datos
+const CURRENT_SCHEMA_VERSION = 3;
+
 let sqlite: SQLiteConnection | null = null
 let db: SQLiteDBConnection | null = null
 let dbInitialized = false
 let schemaInitialized = false
 
 /**
- * Inicializa la base de datos SQLite con gestión inteligente de conexiones
+ * Reinicia completamente la base de datos eliminándola y recreándola
+ */
+async function resetDatabase(): Promise<void> {
+  console.log('[sqlite] 🔄 Iniciando reinicio completo de base de datos...')
+  
+  try {
+    // Cerrar conexión actual si existe
+    if (sqlite && db) {
+      await sqlite.closeConnection(DB_CONFIG.name, DB_CONFIG.readonly)
+      console.log('[sqlite] ✅ Conexión cerrada')
+    }
+    
+    // Eliminar la base de datos completamente
+    if (sqlite) {
+      await CapacitorSQLite.deleteDatabase({ database: DB_CONFIG.name })
+      console.log('[sqlite] ✅ Base de datos eliminada')
+    }
+    
+    // Resetear estado global
+    db = null
+    dbInitialized = false
+    schemaInitialized = false
+    
+    console.log('[sqlite] ✅ Reinicio de base de datos completado')
+  } catch (err) {
+    console.error('[sqlite] ❌ Error durante reinicio de base de datos:', err)
+    throw err
+  }
+}
+
+/**
+ * Aplica migraciones incrementales basadas en la versión actual
+ */
+async function applyMigrations(db: SQLiteDBConnection): Promise<void> {
+  console.log('[sqlite] 📋 Iniciando sistema de migraciones...')
+  
+  try {
+    // Crear tabla _meta si no existe
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS _meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `)
+    console.log('[sqlite] ✅ Tabla _meta creada/verificada')
+    
+    // Obtener versión actual de la base de datos
+    let currentVersion = 0
+    try {
+      const versionResult = await db.query('SELECT value FROM _meta WHERE key = ?', ['db_version'])
+      if (versionResult.values && versionResult.values.length > 0) {
+        currentVersion = parseInt(versionResult.values[0].value) || 0
+      }
+    } catch (err) {
+      console.log('[sqlite] ℹ️ No se encontró versión previa, iniciando desde 0')
+    }
+    
+    console.log(`[sqlite] 📊 Versión actual de DB: ${currentVersion}, objetivo: ${CURRENT_SCHEMA_VERSION}`)
+    
+    // Migración v1: Crear tablas principales
+    if (currentVersion < 1) {
+      console.log('[sqlite] 🔄 Aplicando migración v1: Tablas principales...')
+      
+      // Tabla de activity_log
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS activity_log (
+          id TEXT PRIMARY KEY,
+          timestamp INTEGER NOT NULL,
+          level TEXT NOT NULL CHECK(level IN ('info', 'warn', 'error')),
+          category TEXT NOT NULL CHECK(category IN ('sync', 'error', 'user_action')),
+          message TEXT NOT NULL,
+          details TEXT,
+          table_name TEXT,
+          record_count INTEGER
+        )
+      `)
+      
+      // Tabla de birds (catálogo principal)
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS birds (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          scientific_name TEXT,
+          rarity INTEGER,
+          popularity INTEGER,
+          tags TEXT,
+          image_url TEXT,
+          audio_url TEXT,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de favoritos locales
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS favorites_local (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT UNIQUE NOT NULL,
+          updated_at INTEGER NOT NULL,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de bird_images
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bird_images (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT NOT NULL,
+          url TEXT NOT NULL,
+          description TEXT,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de bird_translations
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bird_translations (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT NOT NULL,
+          lang TEXT NOT NULL,
+          description TEXT,
+          audio_url TEXT,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de sings
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS sings (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT NOT NULL,
+          title TEXT,
+          audio_url TEXT NOT NULL,
+          duration_ms INTEGER,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de tracks
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS tracks (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT NOT NULL,
+          title TEXT,
+          audio_url TEXT,
+          duration_ms INTEGER,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de interviews
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS interviews (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT NOT NULL,
+          title TEXT,
+          audio_url TEXT,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de musicians
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS musicians (
+          id TEXT PRIMARY KEY,
+          bird_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          bio TEXT,
+          updated_at INTEGER,
+          deleted_at INTEGER
+        )
+      `)
+      
+      // Tabla de imaginarios
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS imaginarios (
+          id TEXT PRIMARY KEY,
+          owner_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT,
+          tags TEXT,
+          image_url TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          deleted_at INTEGER
+        )
+      `)
+      
+      console.log('[sqlite] ✅ Migración v1 completada')
+    }
+    
+    // Migración v2: Agregar columnas de metadatos
+    if (currentVersion < 2) {
+      console.log('[sqlite] 🔄 Aplicando migración v2: Columnas de metadatos...')
+      
+      const columnsToAdd = [
+        { table: 'sings', column: 'community', type: 'TEXT' },
+        { table: 'sings', column: 'instruments', type: 'TEXT' },
+        { table: 'sings', column: 'interpreters', type: 'TEXT' },
+        { table: 'sings', column: 'author', type: 'TEXT' },
+        { table: 'tracks', column: 'community', type: 'TEXT' },
+        { table: 'tracks', column: 'instruments', type: 'TEXT' },
+        { table: 'tracks', column: 'interpreters', type: 'TEXT' },
+        { table: 'tracks', column: 'author', type: 'TEXT' }
+      ]
+      
+      for (const { table, column, type } of columnsToAdd) {
+        try {
+          await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+          console.log(`[sqlite] ✅ Columna ${table}.${column} agregada`)
+        } catch (err) {
+          console.log(`[sqlite] ℹ️ Columna ${table}.${column} ya existía`)
+        }
+      }
+      
+      console.log('[sqlite] ✅ Migración v2 completada')
+    }
+    
+    // Migración v3: Crear índices
+    if (currentVersion < 3) {
+      console.log('[sqlite] 🔄 Aplicando migración v3: Índices...')
+      
+      // Índices para activity_log
+      await db.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp 
+        ON activity_log(timestamp DESC)
+      `)
+      
+      await db.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activity_log_category 
+        ON activity_log(category, timestamp DESC)
+      `)
+      
+      // Índices para birds
+      await db.execute(`
+        CREATE INDEX IF NOT EXISTS idx_birds_popularity 
+        ON birds(popularity DESC, updated_at DESC)
+      `)
+      
+      await db.execute(`
+        CREATE INDEX IF NOT EXISTS idx_birds_deleted 
+        ON birds(deleted_at)
+      `)
+      
+      console.log('[sqlite] ✅ Migración v3 completada')
+    }
+    
+    // Actualizar versión en _meta
+    await db.run(
+      'INSERT INTO _meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      ['db_version', CURRENT_SCHEMA_VERSION.toString()]
+    )
+    
+    console.log(`[sqlite] ✅ Migraciones completadas. Versión actualizada a ${CURRENT_SCHEMA_VERSION}`)
+    
+  } catch (err) {
+    console.error('[sqlite] ❌ Error aplicando migraciones:', err)
+    throw err
+  }
+}
+
+/**
+ * Detecta si un error indica corrupción o problemas de esquema
+ */
+function isSchemaError(error: any): boolean {
+  if (!error || typeof error !== 'object') return false
+  
+  const errorMessage = error.message?.toLowerCase() || ''
+  const errorCode = error.code || ''
+  
+  // Errores de esquema que requieren reinicio
+  const schemaErrorPatterns = [
+    'no such column',
+    'duplicate column',
+    'corrupt',
+    'malformed',
+    'database disk image is malformed',
+    'database is locked',
+    'table.*does not exist',
+    'syntax error',
+    'unrecognized token'
+  ]
+  
+  return schemaErrorPatterns.some(pattern => 
+    errorMessage.includes(pattern) || errorCode.includes(pattern)
+  )
+}
+
+/**
+ * Inicializa la base de datos SQLite con gestión inteligente de conexiones y migraciones
  */
 export async function initDb(): Promise<SQLiteDBConnection> {
   // Verificar si estamos en modo web y usar DB fake
@@ -64,261 +362,38 @@ export async function initDb(): Promise<SQLiteDBConnection> {
       console.log('[sqlite] ✅ Conexión abierta a', DB_CONFIG.name)
     }
 
-    // Inicializar esquema solo si no se ha hecho antes
+    // Aplicar migraciones solo si no se ha hecho antes
     if (!schemaInitialized) {
-      await initializeSchema()
+      await applyMigrations(db)
       schemaInitialized = true
     }
     
     dbInitialized = true
     if (!db) throw new Error('[sqlite] ❌ DB not initialized')
     return db
+    
   } catch (err) {
     console.error('[sqlite] ❌ Error inicializando base de datos:', err)
+    
+    // Detectar errores de esquema y aplicar autorreparación
+    if (isSchemaError(err)) {
+      console.log('[sqlite] 🔧 Error de esquema detectado, iniciando autorreparación...')
+      
+      try {
+        await resetDatabase()
+        console.log('[sqlite] 🔄 Reintentando inicialización después de autorreparación...')
+        
+        // Reintento único después del reinicio
+        return await initDb()
+        
+      } catch (retryErr) {
+        console.error('[sqlite] ❌ Error en autorreparación:', retryErr)
+        throw retryErr
+      }
+    }
+    
     throw err
   }
-}
-
-/**
- * Inicializa el esquema de la base de datos
- */
-async function initializeSchema() {
-  if (!db) throw new Error('Base de datos no inicializada')
-
-  console.log('[sqlite] 📋 Inicializando esquema de base de datos...')
-
-  // Tabla de metadatos
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS _meta (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla _meta creada/verificada')
-
-  // Tabla de activity_log
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS activity_log (
-      id TEXT PRIMARY KEY,
-      timestamp INTEGER NOT NULL,
-      level TEXT NOT NULL CHECK(level IN ('info', 'warn', 'error')),
-      category TEXT NOT NULL CHECK(category IN ('sync', 'error', 'user_action')),
-      message TEXT NOT NULL,
-      details TEXT,
-      table_name TEXT,
-      record_count INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla activity_log creada/verificada')
-
-  // Tabla de birds (catálogo principal)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS birds (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      scientific_name TEXT,
-      rarity INTEGER,
-      popularity INTEGER,
-      tags TEXT,
-      image_url TEXT,
-      audio_url TEXT,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla birds creada/verificada')
-
-  // Tabla de favoritos locales
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS favorites_local (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT UNIQUE NOT NULL,
-      updated_at INTEGER NOT NULL,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla favorites_local creada/verificada')
-
-  // Tabla de bird_images
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS bird_images (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT NOT NULL,
-      url TEXT NOT NULL,
-      description TEXT,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla bird_images creada/verificada')
-
-  // Tabla de bird_translations
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS bird_translations (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT NOT NULL,
-      lang TEXT NOT NULL,
-      description TEXT,
-      audio_url TEXT,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla bird_translations creada/verificada')
-
-  // Tabla de sings
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS sings (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT NOT NULL,
-      title TEXT,
-      audio_url TEXT NOT NULL,
-      duration_ms INTEGER,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla sings creada/verificada')
-
-  // Tabla de tracks
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS tracks (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT NOT NULL,
-      title TEXT,
-      audio_url TEXT,
-      duration_ms INTEGER,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla tracks creada/verificada')
-
-  // ===== Migración: agregar columnas de metadatos a sings y tracks =====
-  try {
-    await db?.execute(`
-      ALTER TABLE sings ADD COLUMN community TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna sings.community ya existía');
-  }
-
-  try {
-    await db?.execute(`
-      ALTER TABLE sings ADD COLUMN instruments TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna sings.instruments ya existía');
-  }
-
-  try {
-    await db?.execute(`
-      ALTER TABLE sings ADD COLUMN interpreters TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna sings.interpreters ya existía');
-  }
-
-  try {
-    await db?.execute(`
-      ALTER TABLE sings ADD COLUMN author TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna sings.author ya existía');
-  }
-
-  try {
-    await db?.execute(`
-      ALTER TABLE tracks ADD COLUMN community TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna tracks.community ya existía');
-  }
-
-  try {
-    await db?.execute(`
-      ALTER TABLE tracks ADD COLUMN instruments TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna tracks.instruments ya existía');
-  }
-
-  try {
-    await db?.execute(`
-      ALTER TABLE tracks ADD COLUMN interpreters TEXT;
-    `);
-  } catch (e) {
-    console.log('[sqlite] ℹ️ Columna tracks.interpreters ya existía');
-  }
-
-  // Tabla de interviews
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS interviews (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT NOT NULL,
-      title TEXT,
-      audio_url TEXT,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla interviews creada/verificada')
-
-  // Tabla de musicians
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS musicians (
-      id TEXT PRIMARY KEY,
-      bird_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      bio TEXT,
-      updated_at INTEGER,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla musicians creada/verificada')
-
-  // Tabla de imaginarios
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS imaginarios (
-      id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body TEXT,
-      tags TEXT,
-      image_url TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      deleted_at INTEGER
-    )
-  `)
-  console.log('[sqlite] ✅ Tabla imaginarios creada/verificada')
-
-  // Índices para activity_log
-  await db.execute(`
-    CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp 
-    ON activity_log(timestamp DESC)
-  `)
-  
-  await db.execute(`
-    CREATE INDEX IF NOT EXISTS idx_activity_log_category 
-    ON activity_log(category, timestamp DESC)
-  `)
-  console.log('[sqlite] ✅ Índices de activity_log creados/verificados')
-
-  // Índices para birds
-  await db.execute(`
-    CREATE INDEX IF NOT EXISTS idx_birds_popularity 
-    ON birds(popularity DESC, updated_at DESC)
-  `)
-  
-  await db.execute(`
-    CREATE INDEX IF NOT EXISTS idx_birds_deleted 
-    ON birds(deleted_at)
-  `)
-  console.log('[sqlite] ✅ Índices de birds creados/verificados')
-
-  console.log('[sqlite] ✅ Esquema de base de datos inicializado completamente')
 }
 
 export async function getDb(): Promise<SQLiteDBConnection> {
@@ -371,7 +446,7 @@ export async function resetDb(): Promise<SQLiteDBConnection> {
   }
 
   // Borra metadatos de sincronización (para que todo se repoble desde Supabase)
-  await newDb.run(`DELETE FROM _meta`)
+  await newDb.run(`DELETE FROM _meta WHERE key != 'db_version'`)
 
   console.log('[sqlite] ⚡ resetDb completado. Todas las tablas y metadatos están vacíos.')
   
@@ -400,7 +475,8 @@ export function getConnectionStatus() {
     sqliteReady: sqlite !== null,
     dbReady: dbInitialized && db !== null,
     schemaReady: schemaInitialized,
-    connectionName: DB_CONFIG.name
+    connectionName: DB_CONFIG.name,
+    schemaVersion: CURRENT_SCHEMA_VERSION
   }
 }
 

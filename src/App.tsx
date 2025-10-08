@@ -26,6 +26,7 @@ import ProfilePage from './modules/profile/ProfilePage';
 import SyncCenter from './modules/synccenter/SyncCenter';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
 import { pullAllTables } from './core/sync/pull';
+import Footbar from './ui/Footbar';
 import './theme/fonts.css';
 import './theme/global.css';
 
@@ -191,9 +192,55 @@ const App: React.FC = () => {
           {/* Landing */}
           <Route exact path="/"><Redirect to="/home" /></Route>
         </IonRouterOutlet>
+        
+        {/* Footbar persistente */}
+        <Footbar />
       </IonReactRouter>
     </IonApp>
   );
 };
 
 export default App;
+
+// Estilos para asegurar que el Footbar quede encima del contenido
+// pero no tape modales ni toasts
+const footbarStyles = `
+  ion-footer, .footbar-container {
+    z-index: 1000;
+  }
+  
+  /* Asegurar que modales y toasts tengan z-index más alto */
+  ion-modal {
+    z-index: 10000;
+  }
+  
+  ion-toast {
+    z-index: 10001;
+  }
+  
+  /* Asegurar que el contenido no se tape con el footbar */
+  ion-content {
+    --padding-bottom: 80px;
+  }
+  
+  /* Para páginas que usan IonPage directamente */
+  ion-page {
+    padding-bottom: 80px;
+  }
+  
+  /* Asegurar que el footbar no interfiera con el contenido */
+  .footbar-container {
+    position: fixed !important;
+    bottom: 10px !important;
+    left: 10px !important;
+    right: 10px !important;
+    z-index: 1000 !important;
+  }
+`;
+
+// Inyectar estilos
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = footbarStyles;
+  document.head.appendChild(styleElement);
+}
