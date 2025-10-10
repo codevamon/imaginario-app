@@ -2,77 +2,65 @@ import React, { useEffect, useState } from 'react';
 import {
   IonContent,
   IonHeader,
+  IonLabel,
   IonPage,
   IonTitle,
   IonToolbar,
   IonSearchbar,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonThumbnail,
   IonButtons,
   IonButton,
   IonIcon,
-  IonChip,
   IonText,
   IonSelect,
   IonSelectOption
 } from '@ionic/react';
-import { filter, search } from 'ionicons/icons';
+import { filter } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
-import { listBirds, type Bird } from '../../core/db/dao/birds';
+import { useLocation } from 'react-router-dom';
+
+// Importar los nuevos widgets
+import DiscoverBirdsWidget from './DiscoverBirdsWidget';
+import DiscoverSingsWidget from './DiscoverSingsWidget';
+import DiscoverTracksWidget from './DiscoverTracksWidget';
+import DiscoverMusiciansWidget from './DiscoverMusiciansWidget';
+import DiscoverInterviewsWidget from './DiscoverInterviewsWidget';
 
 const DiscoverPage: React.FC = () => {
   const router = useIonRouter();
-  const [birds, setBirds] = useState<Bird[]>([]);
-  const [filteredBirds, setFilteredBirds] = useState<Bird[]>([]);
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   
-  // Nuevos estados para filtros
+  // Estados para filtros
   const [rarityFilter, setRarityFilter] = useState<number | undefined>(undefined);
   const [orderFilter, setOrderFilter] = useState<'name' | 'updated_at'>('name');
   const [popularityFilter, setPopularityFilter] = useState<'asc' | 'desc' | undefined>(undefined);
 
-  // Hook de carga con filtros
+  // Manejar parámetros URL para enfoque automático y filtros
   useEffect(() => {
-    const loadBirdsWithFilters = async () => {
-      try {
-        setLoading(true);
-        console.log('[DiscoverPage] Cargando aves con filtros:', {
-          search: searchTerm,
-          rarity: rarityFilter,
-          order: orderFilter,
-          popularity: popularityFilter
-        });
-        
-        const birdsData = await listBirds({
-          search: searchTerm,
-          rarity: rarityFilter,
-          order: orderFilter,
-          popularity: popularityFilter
-        });
-        
-        setBirds(birdsData);
-        setFilteredBirds(birdsData);
-        console.log('[DiscoverPage] ✅ Aves cargadas:', birdsData.length);
-      } catch (error) {
-        console.error('[DiscoverPage] ❌ Error cargando aves:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const params = new URLSearchParams(location.search);
+    const shouldFocus = params.get('focus') === 'search';
+    const filter = params.get('filter');
 
-    loadBirdsWithFilters();
-  }, [searchTerm, rarityFilter, orderFilter, popularityFilter]);
+    if (shouldFocus) {
+      const searchInput = document.querySelector('ion-searchbar input') as HTMLInputElement;
+      if (searchInput) {
+        setTimeout(() => searchInput.focus(), 100);
+      }
+    }
+
+    if (filter === 'tracks') {
+      // Aquí podrías agregar lógica específica para tracks si es necesario
+      console.log('[DiscoverPage] Filtro de tracks aplicado');
+    } else if (filter === 'sings') {
+      // Aquí podrías agregar lógica específica para sings si es necesario
+      console.log('[DiscoverPage] Filtro de sings aplicado');
+    }
+  }, [location]);
+
 
   const handleSearchChange = (event: CustomEvent) => {
     setSearchTerm(event.detail.value || '');
-  };
-
-  const handleBirdClick = (birdId: string) => {
-    router.push(`/bird/${birdId}`);
   };
 
   const getRarityText = (rarity: number | null | undefined): string => {
@@ -82,15 +70,6 @@ const DiscoverPage: React.FC = () => {
     if (rarity === 2) return 'Alta';
     if (rarity === 3) return 'Muy alta';
     return 'No especificada';
-  };
-
-  const getRarityColor = (rarity: number | null | undefined): string => {
-    if (rarity === null || rarity === undefined) return 'medium';
-    if (rarity === 0) return 'success';
-    if (rarity === 1) return 'warning';
-    if (rarity === 2) return 'danger';
-    if (rarity === 3) return 'dark';
-    return 'medium';
   };
 
   // Funciones helper para los filtros
@@ -129,7 +108,7 @@ const DiscoverPage: React.FC = () => {
         {/* Barra de búsqueda */}
         <div style={{ padding: '8px 16px' }}>
           <IonSearchbar
-            placeholder="Buscar aves por nombre o científico..."
+            placeholder="Buscar aves, cantos, pistas, músicos..."
             value={searchTerm}
             onIonInput={handleSearchChange}
             showClearButton="focus"
@@ -195,114 +174,41 @@ const DiscoverPage: React.FC = () => {
           </div>
         )}
 
-        {/* Lista de aves */}
-        {loading ? (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '200px',
-            flexDirection: 'column',
-            gap: '16px'
-          }}>
-            <IonText>Cargando aves...</IonText>
-          </div>
-        ) : filteredBirds.length === 0 ? (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '200px',
-            flexDirection: 'column',
-            gap: '16px',
-            padding: '20px'
-          }}>
-            <IonText color="medium">
-              {searchTerm ? 'No se encontraron aves con ese término' : 'No hay aves disponibles'}
-            </IonText>
-          </div>
-        ) : (
-          <IonList>
-            {filteredBirds.map((bird) => (
-              <IonItem 
-                key={bird.id} 
-                button 
-                onClick={() => handleBirdClick(bird.id)}
-                style={{ '--padding-start': '16px' }}
-              >
-                <IonThumbnail slot="start" style={{ width: '60px', height: '60px' }}>
-                  {bird.image_url ? (
-                    <img 
-                      src={bird.image_url} 
-                      alt={bird.name}
-                      style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        objectFit: 'cover',
-                        borderRadius: '8px'
-                      }}
-                    />
-                  ) : (
-                    <div style={{
-                      width: '100%',
-                      height: '100%',
-                      backgroundColor: '#f0f0f0',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '24px'
-                    }}>
-                      🐦
-                    </div>
-                  )}
-                </IonThumbnail>
-                
-                <IonLabel>
-                  <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>
-                    {bird.name}
-                  </h2>
-                  {bird.scientific_name && (
-                    <p style={{ 
-                      fontSize: '14px', 
-                      color: '#666', 
-                      fontStyle: 'italic',
-                      marginBottom: '4px'
-                    }}>
-                      {bird.scientific_name}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <IonChip 
-                      color={getRarityColor(Number(bird.rarity) || 0)} 
-                      className="chip-small"
-                    >
-                      <IonLabel>{getRarityText(Number(bird.rarity) || 0)}</IonLabel>
-                    </IonChip>
-                    {bird.popularity && (
-                      <IonText style={{ fontSize: '12px', color: '#666' }}>
-                        Popularidad: {bird.popularity}
-                      </IonText>
-                    )}
-                  </div>
-                </IonLabel>
-              </IonItem>
-            ))}
-          </IonList>
-        )}
-
-        {/* Información de resultados */}
-        {!loading && filteredBirds.length > 0 && (
-          <div style={{ 
-            padding: '16px', 
-            textAlign: 'center',
-            borderTop: '1px solid #eee'
-          }}>
-            <IonText color="medium" style={{ fontSize: '14px' }}>
-              Mostrando {filteredBirds.length} aves
-            </IonText>
-          </div>
-        )}
+        {/* Widgets de contenido */}
+        <DiscoverBirdsWidget 
+          searchTerm={searchTerm}
+          orderFilter={orderFilter}
+          rarityFilter={rarityFilter}
+          popularityFilter={popularityFilter}
+        />
+        
+        <DiscoverSingsWidget 
+          searchTerm={searchTerm}
+          orderFilter={orderFilter}
+          rarityFilter={rarityFilter}
+          popularityFilter={popularityFilter}
+        />
+        
+        <DiscoverTracksWidget 
+          searchTerm={searchTerm}
+          orderFilter={orderFilter}
+          rarityFilter={rarityFilter}
+          popularityFilter={popularityFilter}
+        />
+        
+        <DiscoverMusiciansWidget 
+          searchTerm={searchTerm}
+          orderFilter={orderFilter}
+          rarityFilter={rarityFilter}
+          popularityFilter={popularityFilter}
+        />
+        
+        <DiscoverInterviewsWidget 
+          searchTerm={searchTerm}
+          orderFilter={orderFilter}
+          rarityFilter={rarityFilter}
+          popularityFilter={popularityFilter}
+        />
       </IonContent>
     </IonPage>
   );

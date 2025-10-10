@@ -1,0 +1,62 @@
+.contact-widget {
+  display: flex;
+  align-items: center;
+  background-color: #179b83;
+  border-radius: 2vw;
+  padding: 5vw 3vw;
+  color: #fff;
+  width: 90vw;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.contact-icon {
+  background-color: #073a35;
+  width: 6vw;
+  height: 6vw;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 3vw;
+}
+
+.contact-icon svg {
+  width: 2.5vw;
+  height: auto;
+  min-width: 20px;
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.contact-title {
+  font-size: 2.5vw;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.contact-email {
+  font-size: 1.8vw;
+  font-weight: 300;
+  margin: 0.5vw 0 0 0;
+}
+
+@media (max-width: 768px) {
+  .contact-title {
+    font-size: 4vw;
+  }
+  .contact-email {
+    font-size: 3.2vw;
+  }
+  .contact-icon {
+    width: 9vw;
+    height: 9vw;
+  }
+}

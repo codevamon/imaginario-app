@@ -18,6 +18,7 @@ import TracksWidget from './TracksWidget';
 import SingsWidget from './SingsWidget';
 import 'swiper/css';
 import AboutWidget from './AboutWidget';
+import ContactWidget from '../../ui/ContactWidget';
 
 export default function HomePage() {
   const router = useIonRouter();
@@ -224,6 +225,11 @@ export default function HomePage() {
               onItemClick={(id: string) => console.log('play track', id)}
             />
             <AboutWidget />
+
+            {/* Contact section */}
+            <section style={{ marginTop: '5vw', marginBottom: '10vw' }}>
+              <ContactWidget />
+            </section>
           </>
         )}
 

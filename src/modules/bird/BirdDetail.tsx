@@ -26,7 +26,7 @@ import { useParams } from 'react-router-dom';
 import { play, pause, star, starOutline } from 'ionicons/icons';
 import { getBirdById, type Bird } from '../../core/db/dao/birds';
 import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
-import { getMusiciansByBirdId, type Musician } from '../../core/db/dao/musicians';
+import { listMusicians, type Musician } from '../../core/db/dao/musicians';
 import { setLocalFavorite, isFavLocal } from '../../core/db/dao/catalog';
 import { getImagesByBirdId, type BirdImage } from '../../core/db/dao/bird_images';
 import { getSingsByBirdId, type Sing } from '../../core/db/dao/sings';
@@ -75,8 +75,10 @@ const BirdDetail: React.FC = () => {
         const birdTracks = await getTracksByBirdId(id);
         setTracks(birdTracks);
 
-        const birdMusicians = await getMusiciansByBirdId(id);
-        setMusicians(birdMusicians);
+        const musicians = await listMusicians();
+        // Si existe un id de ave, filtra localmente
+        const filteredMusicians = musicians.filter(m => m.bird_id === id);
+        setMusicians(filteredMusicians);
 
         const birdImages = await getImagesByBirdId(id);
         setImages(birdImages);
@@ -239,7 +241,7 @@ const BirdDetail: React.FC = () => {
             <IonBackButton defaultHref="/discover" />
           </IonButtons>
           <IonTitle>{bird.name}</IonTitle>
-          <IonButtons slot="end">
+          <IonButtons className="d-none" slot="end">
             <IonButton onClick={handleToggleFavorite}>
               <IonIcon
                 slot="icon-only"

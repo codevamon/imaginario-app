@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { play, pause } from 'ionicons/icons';
 import { IonIcon } from '@ionic/react';
+import { useIonRouter } from '@ionic/react';
 import type { Track } from '../../core/db/dao/tracks';
 import { audioManager } from '../../core/audio/player';
 import { useAudioProgress } from '../../core/audio/useAudioProgress';
@@ -89,6 +90,7 @@ const TrackCard: React.FC<TrackCardProps> = ({ track, isPlaying, onToggle }) => 
 const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su música', onItemClick }) => {
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
   const [displayTracks, setDisplayTracks] = useState<Track[]>([]);
+  const router = useIonRouter();
 
   // Escuchar cambios globales en el audioManager
   useEffect(() => {
@@ -118,7 +120,7 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su m�
             </h2>
           </div>
           <div className="_base _2">
-            <button className="btn-i">
+            <button className="btn-i" onClick={() => router.push('/discover?filter=tracks')}>
               <span>Ver más</span>
             </button>
           </div>

@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { play, pause } from 'ionicons/icons';
 import { IonIcon, IonText } from '@ionic/react';
+import { useIonRouter } from '@ionic/react';
 import type { Sing } from '../../core/db/dao/sings';
 import { audioManager } from '../../core/audio/player';
 import { useAudioProgress } from '../../core/audio/useAudioProgress';
@@ -97,6 +98,7 @@ const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
 const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos', onItemClick }) => {
   const [playingSing, setPlayingSing] = useState<string | null>(null);
   const [displaySings, setDisplaySings] = useState<Sing[]>([]);
+  const router = useIonRouter();
 
   // Suscribirse a cambios del audioManager
   useEffect(() => {
@@ -132,7 +134,7 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
             </h2>
           </div>
           <div className="_base _2">
-            <button className="btn-i">
+            <button className="btn-i" onClick={() => router.push('/discover?filter=sings')}>
               <span>Ver más</span>
             </button>
           </div>

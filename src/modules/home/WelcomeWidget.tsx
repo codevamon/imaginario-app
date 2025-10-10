@@ -32,6 +32,7 @@ const WelcomeWidget: React.FC = () => {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(ev) => { if (ev.key === 'Enter') goDiscover(); }}
+          onClick={() => router.push('/discover?focus=search')}
         />
       </div>
     </section>

@@ -109,3 +109,53 @@ export async function getAllSings(): Promise<Sing[]> {
   `);
   return result.values as Sing[];
 }
+
+export async function listSings(options?: {
+  search?: string;
+  order?: 'title' | 'updated_at';
+}): Promise<Sing[]> {
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-sings] usando fakeSings en modo web (listSings)');
+    return fakeSings;
+  }
+
+  try {
+    const db = await getDb();
+    
+    let query = 'SELECT * FROM sings WHERE deleted_at IS NULL';
+    const params: any[] = [];
+    
+    if (options?.search) {
+      query += ' AND (LOWER(title) LIKE ? OR LOWER(author) LIKE ? OR LOWER(community) LIKE ?)';
+      const searchTerm = `%${options.search.toLowerCase()}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+    
+    if (options?.order === 'title') {
+      query += ' ORDER BY title COLLATE NOCASE ASC';
+    } else {
+      query += ' ORDER BY updated_at DESC';
+    }
+    
+    const result = await db.query(query, params);
+    
+    const sings: Sing[] = (result.values || []).map((row: any) => ({
+      id: row.id,
+      bird_id: row.bird_id,
+      title: row.title,
+      audio_url: row.audio_url ?? null,
+      duration_ms: row.duration_ms,
+      updated_at: toIso(row.updated_at),
+      deleted_at: toIsoOrNull(row.deleted_at),
+      community: row.community,
+      instruments: row.instruments,
+      interpreters: row.interpreters,
+      author: row.author
+    }));
+    
+    return sings;
+  } catch (error) {
+    console.error('[DAO] listSings error:', error);
+    return [];
+  }
+}

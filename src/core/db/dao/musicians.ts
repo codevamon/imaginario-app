@@ -11,31 +11,21 @@ export type Musician = {
   deleted_at?: string | null;
 };
 
-export async function getMusiciansByBirdId(birdId: string): Promise<Musician[]> {
-  // Verificar si estamos en modo web y usar datos fake
+export async function getAllMusicians(): Promise<Musician[]> {
   if (Capacitor.getPlatform() === 'web') {
-    console.warn('[dao-musicians] 🚨 usando datos fake en modo web');
-    return fakeMusicians.filter(musician => musician.bird_id === birdId);
+    console.warn('[dao-musicians] usando fakeMusicians en modo web (getAllMusicians)');
+    return fakeMusicians;
   }
 
   try {
     const db = await getDb();
-    console.log('[DAO] 🎭 getMusiciansByBirdId - birdId:', birdId);
-    
-    // Verificar esquema de la tabla
-    const pragmaResult = await db.query('PRAGMA table_info(musicians)');
-    console.log('[DAO] 🎭 PRAGMA table_info(musicians):', pragmaResult.values);
-    
     const result = await db.query(`
-      SELECT * FROM musicians 
-      WHERE bird_id = ? AND deleted_at IS NULL 
-      ORDER BY updated_at DESC, name COLLATE NOCASE ASC
-    `, [birdId]);
+      SELECT * FROM musicians
+      WHERE deleted_at IS NULL
+      ORDER BY updated_at DESC
+      LIMIT 20
+    `);
     
-    console.log('[DAO] 🎭 getMusiciansByBirdId - raw rows:', result.values);
-    console.log('[DAO] 🎭 getMusiciansByBirdId - row count:', result.values?.length || 0);
-    
-    // Convertir los resultados al tipo Musician
     const musicians: Musician[] = (result.values || []).map((row: any) => ({
       id: row.id,
       bird_id: row.bird_id,
@@ -45,13 +35,54 @@ export async function getMusiciansByBirdId(birdId: string): Promise<Musician[]> 
       deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null
     }));
     
-    console.log('[DAO] 🎭 getMusiciansByBirdId - musicians mapped:', musicians);
-    console.log('[DAO] 🎭 getMusiciansByBirdId - final count:', musicians.length);
+    return musicians;
+  } catch (error) {
+    console.error('[DAO] getAllMusicians error:', error);
+    return [];
+  }
+}
+
+export async function listMusicians(options?: {
+  search?: string;
+  order?: 'name' | 'updated_at';
+}): Promise<Musician[]> {
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-musicians] usando fakeMusicians en modo web (listMusicians)');
+    return fakeMusicians;
+  }
+
+  try {
+    const db = await getDb();
+    
+    let query = 'SELECT * FROM musicians WHERE deleted_at IS NULL';
+    const params: any[] = [];
+    
+    if (options?.search) {
+      query += ' AND (LOWER(name) LIKE ? OR LOWER(bio) LIKE ?)';
+      const searchTerm = `%${options.search.toLowerCase()}%`;
+      params.push(searchTerm, searchTerm);
+    }
+    
+    if (options?.order === 'name') {
+      query += ' ORDER BY name COLLATE NOCASE ASC';
+    } else {
+      query += ' ORDER BY updated_at DESC';
+    }
+    
+    const result = await db.query(query, params);
+    
+    const musicians: Musician[] = (result.values || []).map((row: any) => ({
+      id: row.id,
+      bird_id: row.bird_id,
+      name: row.name,
+      bio: row.bio,
+      updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+      deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null
+    }));
     
     return musicians;
-    
   } catch (error) {
-    console.error('[DAO] 🎭 getMusiciansByBirdId error:', error);
+    console.error('[DAO] listMusicians error:', error);
     return [];
   }
 }

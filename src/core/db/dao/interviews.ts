@@ -46,36 +46,80 @@ export async function getInterviewsByBirdId(birdId: string): Promise<Interview[]
   }
 }
 
-export async function getInterviewById(id: string): Promise<Interview | null> {
-  // Verificar si estamos en modo web y usar datos fake
+export async function getAllInterviews(): Promise<Interview[]> {
   if (Capacitor.getPlatform() === 'web') {
-    console.warn('[dao-interviews] 🚨 usando datos fake en modo web');
-    return fakeInterviews.find(interview => interview.id === id) || null;
+    console.warn('[dao-interviews] usando fakeInterviews en modo web (getAllInterviews)');
+    return fakeInterviews;
   }
 
   try {
     const db = await getDb();
     const result = await db.query(`
-      SELECT * FROM interviews 
-      WHERE id = ? AND deleted_at IS NULL 
-      LIMIT 1
-    `, [id]);
-
-    if (result.values && result.values.length > 0) {
-      const row = result.values[0];
-      return {
-        id: row.id,
-        bird_id: row.bird_id,
-        title: row.title,
-        audio_url: row.audio_url ?? null,
-        duration_ms: row.duration_ms,
-        updated_at: toIso(row.updated_at),
-        deleted_at: toIsoOrNull(row.deleted_at)
-      };
-    }
-    return null;
+      SELECT * FROM interviews
+      WHERE deleted_at IS NULL
+      ORDER BY updated_at DESC
+      LIMIT 20
+    `);
+    
+    const interviews: Interview[] = (result.values || []).map((row: any) => ({
+      id: row.id,
+      bird_id: row.bird_id,
+      title: row.title,
+      audio_url: row.audio_url ?? null,
+      duration_ms: row.duration_ms,
+      updated_at: toIso(row.updated_at),
+      deleted_at: toIsoOrNull(row.deleted_at)
+    }));
+    
+    return interviews;
   } catch (error) {
-    console.error('[DAO] getInterviewById error:', error);
-    return null;
+    console.error('[DAO] getAllInterviews error:', error);
+    return [];
+  }
+}
+
+export async function listInterviews(options?: {
+  search?: string;
+  order?: 'title' | 'updated_at';
+}): Promise<Interview[]> {
+  if (Capacitor.getPlatform() === 'web') {
+    console.warn('[dao-interviews] usando fakeInterviews en modo web (listInterviews)');
+    return fakeInterviews;
+  }
+
+  try {
+    const db = await getDb();
+    
+    let query = 'SELECT * FROM interviews WHERE deleted_at IS NULL';
+    const params: any[] = [];
+    
+    if (options?.search) {
+      query += ' AND LOWER(title) LIKE ?';
+      const searchTerm = `%${options.search.toLowerCase()}%`;
+      params.push(searchTerm);
+    }
+    
+    if (options?.order === 'title') {
+      query += ' ORDER BY title COLLATE NOCASE ASC';
+    } else {
+      query += ' ORDER BY updated_at DESC';
+    }
+    
+    const result = await db.query(query, params);
+    
+    const interviews: Interview[] = (result.values || []).map((row: any) => ({
+      id: row.id,
+      bird_id: row.bird_id,
+      title: row.title,
+      audio_url: row.audio_url ?? null,
+      duration_ms: row.duration_ms,
+      updated_at: toIso(row.updated_at),
+      deleted_at: toIsoOrNull(row.deleted_at)
+    }));
+    
+    return interviews;
+  } catch (error) {
+    console.error('[DAO] listInterviews error:', error);
+    return [];
   }
 }
