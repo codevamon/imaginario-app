@@ -1,0 +1,35 @@
+/* Estilos para el carrusel de DiscoverBirdsWidget */
+.discover-swiper {
+  padding: 0 20px;
+}
+
+.discover-swiper-slide {
+  width: 80vw;
+  max-width: 300px;
+}
+
+.discover-card {
+  transition: transform 0.3s ease;
+}
+
+.discover-card:hover {
+  transform: scale(1.02);
+}
+
+.discover-card:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+/* Transiciones suaves para el swiper */
+.swiper-slide {
+  transition: transform 0.4s cubic-bezier(0,1.19,.58,.94);
+}
+
+.swiper-slide.swiper-slide-next {
+  transform: scale(0.9) translateX(-5%);
+}
+
+.swiper-slide.swiper-slide-prev {
+  transform: scale(0.9) translateX(5%);
+}

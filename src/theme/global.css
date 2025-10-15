@@ -85,7 +85,6 @@
 
 
 html, body, ion-app, ion-content {
-  font-family: 'Recoleta Alt', 'Recoleta', system-ui, -apple-system, sans-serif;
   color: var(--color-text);
   background: var(--color-bg);
   margin: 0;
@@ -95,9 +94,11 @@ html, body, ion-app, ion-content {
 h1, h2, h3, h4, h5 {
   font-weight: var(--heading-weight);
   margin: 0;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
 }
 
 p {
+  font-family: 'Graphik', system-ui, -apple-system, sans-serif;
   font-weight: var(--body-weight);
   line-height: 1.5;
   margin: 0 0 1rem;

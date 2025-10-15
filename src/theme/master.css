@@ -4,7 +4,7 @@
 /* I */
 
 section._master ._full>._header ._title {
-  font-family: 'zuume', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-weight: 900;
   line-height: 90%;
   color: #BFBFBF;
@@ -15,7 +15,7 @@ section._master ._subtitle{
   line-height: 120%;
   border-bottom: 1px solid #191919;
   color: #191919;
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
 }
 section._master ._full._1 .row>._2 ._body._1>._flex {
   justify-content: space-between;
@@ -31,7 +31,7 @@ section._master ._full ._body._2 {
   background: #a8919129;
 }
 section._master ._item ._detail {
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
 }
 /* END I */
 /* BUTTONS */
@@ -51,7 +51,7 @@ section._master ._item ._detail {
 ._btn._1>._real>._info{
   font-weight:400;
     min-width: max-content;
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-style: normal;
   font-weight: 400;
   line-height: 120%;
@@ -60,7 +60,7 @@ section._master ._item ._detail {
   grid-gap: 8%;
   position:relative;
   top:0;
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   display: flex;
     flex-wrap: nowrap;
   align-items: center;
@@ -126,7 +126,7 @@ body.dark ._btn._1._light>._real svg path {
 .read-more-link,
 .read-more-link * {
   display: block !important;
-  font-family: 'cofo-gothic-variable', sans-serif !important;
+  font-family: 'Graphik', sans-serif !important;
   text-transform: uppercase !important;
   line-height: 1 !important;
   width: max-content !important;
@@ -173,13 +173,13 @@ body.dark ._btn._1._light>._real svg path {
 }
 .h1-i,
 .h1-i * {
-  font-family: 'Recoleta Alt', 'Recoleta', system-ui, -apple-system, sans-serif;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 0.8;
 }
 .h2-i,
 .h2-i *{
-  font-family: 'Recoleta', sans-serif;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 0.8;
 }
@@ -217,31 +217,31 @@ body.dark ._btn._1._light>._real svg path {
 }
 .p2-i,
 .p2-i *{
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-style: normal;
   line-height: 120%;
 }
 .p3-i,
 .p3-i *{
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-style: normal;
   line-height: 120%;
 }
 .text-button, 
 .text-button *{
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-style: normal;
   line-height: 120%;
 }
 .l1-i, 
 .l1-i *{
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-style: normal;
   line-height: 120%;
 }
 .l2-i, 
 .l2-i *{
-  font-family: 'cofo-gothic-variable', sans-serif;
+  font-family: 'Graphik', sans-serif;
   font-style: normal;
   line-height: 120%;
 }

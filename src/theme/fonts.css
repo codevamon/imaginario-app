@@ -1,148 +1,133 @@
-/* src/theme/fonts.css */
+/* ======================================================
+   GRAPHIK FAMILY
+   ====================================================== */
 
-/* ===============================
-   RECOLETA ALT
-   =============================== */
    @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-thin.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-thin.woff') format('woff'),
-         url('../assets/fonts/recoletalt-thin.otf') format('opentype');
-    font-weight: 100;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-light.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-light.woff') format('woff'),
-         url('../assets/fonts/recoletalt-light.otf') format('opentype');
-    font-weight: 300;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-regular.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-regular.woff') format('woff'),
-         url('../assets/fonts/recoletalt-regular.otf') format('opentype');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-medium.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-medium.woff') format('woff'),
-         url('../assets/fonts/recoletalt-medium.otf') format('opentype');
-    font-weight: 500;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-semibold.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-semibold.woff') format('woff'),
-         url('../assets/fonts/recoletalt-semibold.otf') format('opentype');
-    font-weight: 600;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-bold.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-bold.woff') format('woff'),
-         url('../assets/fonts/recoletalt-bold.otf') format('opentype');
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta Alt';
-    src: url('../assets/fonts/recoletalt-black.woff2') format('woff2'),
-         url('../assets/fonts/recoletalt-black.woff') format('woff'),
-         url('../assets/fonts/recoletalt-black.otf') format('opentype');
-    font-weight: 900;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  /* ===============================
-     RECOLETA
-     =============================== */
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-thin.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-thin.woff') format('woff'),
-         url('../assets/fonts/recoleta-thin.otf') format('opentype');
-    font-weight: 100;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-light.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-light.woff') format('woff'),
-         url('../assets/fonts/recoleta-light.otf') format('opentype');
-    font-weight: 300;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-regular.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-regular.woff') format('woff'),
-         url('../assets/fonts/recoleta-regular.otf') format('opentype');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-medium.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-medium.woff') format('woff'),
-         url('../assets/fonts/recoleta-medium.otf') format('opentype');
-    font-weight: 500;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-semibold.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-semibold.woff') format('woff'),
-         url('../assets/fonts/recoleta-semibold.otf') format('opentype');
-    font-weight: 600;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-bold.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-bold.woff') format('woff'),
-         url('../assets/fonts/recoleta-bold.otf') format('opentype');
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-  }
-  
-  @font-face {
-    font-family: 'Recoleta';
-    src: url('../assets/fonts/recoleta-black.woff2') format('woff2'),
-         url('../assets/fonts/recoleta-black.woff') format('woff'),
-         url('../assets/fonts/recoleta-black.otf') format('opentype');
-    font-weight: 900;
-    font-style: normal;
-    font-display: swap;
-  }
-  
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Thin.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Thin.woff') format('woff');
+     font-weight: 100;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Light.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Light.woff') format('woff');
+     font-weight: 300;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Regular.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Regular.woff') format('woff');
+     font-weight: 400;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Medium.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Medium.woff') format('woff');
+     font-weight: 500;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Semibold.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Semibold.woff') format('woff');
+     font-weight: 600;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Bold.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Bold.woff') format('woff');
+     font-weight: 700;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Graphik';
+     src: url('../assets/fonts/Graphik/Graphik-Black.woff2') format('woff2'),
+          url('../assets/fonts/Graphik/Graphik-Black.woff') format('woff');
+     font-weight: 900;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   /* ======================================================
+      RECOLETA FAMILY
+      ====================================================== */
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-Thin.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-Thin.woff') format('woff');
+     font-weight: 100;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-Light.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-Light.woff') format('woff');
+     font-weight: 300;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-Regular.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-Regular.woff') format('woff');
+     font-weight: 400;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-Medium.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-Medium.woff') format('woff');
+     font-weight: 500;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-SemiBold.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-SemiBold.woff') format('woff');
+     font-weight: 600;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-Bold.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-Bold.woff') format('woff');
+     font-weight: 700;
+     font-style: normal;
+     font-display: swap;
+   }
+   
+   @font-face {
+     font-family: 'Recoleta';
+     src: url('../assets/fonts/Recoleta/Recoleta-Black.woff2') format('woff2'),
+          url('../assets/fonts/Recoleta/Recoleta-Black.woff') format('woff');
+     font-weight: 900;
+     font-style: normal;
+     font-display: swap;
+   }

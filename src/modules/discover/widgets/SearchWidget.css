@@ -1,0 +1,139 @@
+/* === Search Widget === */
+.search-widget-i {
+  padding: 15vw 5vw 5vw;
+}
+
+.search-widget-header {
+  margin-bottom: 4vw;
+}
+
+.search-widget-title .h1-i {
+  margin-bottom: 1vw;
+}
+
+.search-widget-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.search-pill {
+  display: flex;
+  align-items: center;
+  border: 0.2vw solid var(--ion-color-primary, #0A3731);
+  border-radius: 50px;
+  padding: 6px 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  flex: 1;
+  max-width: 480px;
+}
+
+.search-pill .search-icon {
+  color: var(--ion-color-primary, #0A3731);
+  font-size: 18px;
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.search-pill .search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  padding: 6px 4px;
+  background: transparent;
+}
+
+.search-pill .search-input::placeholder {
+  color: var(--ion-color-primary, #999);
+}
+
+.search-widget-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-widget-button {
+  --padding-start: 8px;
+  --padding-end: 8px;
+  --padding-top: 8px;
+  --padding-bottom: 8px;
+  min-width: 40px;
+  height: 40px;
+}
+
+.search-widget-button ion-icon {
+  font-size: 20px;
+  color: var(--ion-color-primary, #0A3731);
+}
+
+/* Filtros */
+.search-widget-filters {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ion-color-primary, #0A3731);
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  color: var(--ion-color-primary, #0A3731);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--ion-color-primary, #0A3731);
+  box-shadow: 0 0 0 2px rgba(10, 55, 49, 0.1);
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .search-widget-controls {
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  .search-widget-filters {
+    flex-direction: row;
+    align-items: end;
+  }
+  
+  .filter-group {
+    flex: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .search-widget-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-widget-buttons {
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+}
