@@ -123,6 +123,12 @@ body.dark ._btn._1._light>._real svg path {
 .primary-i *{
   color: var(--ion-color-primary, #0A3731);
 }
+.light-i,
+.light-i *,
+.whites,
+.whites * {
+  color: #ffffff;
+}
 .read-more-link,
 .read-more-link * {
   display: block !important;
@@ -147,7 +153,7 @@ body.dark ._btn._1._light>._real svg path {
 }
 ._lgt,
 ._lgt * {
-  font-weight:200;
+  font-weight:300;
 }
 ._rgl,
 ._rgl * {
@@ -185,26 +191,27 @@ body.dark ._btn._1._light>._real svg path {
 }
 .h3-i,
 .h3-i * {
-  font-family: 'Recoleta', sans-serif;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 100%;
+  font-weight: 600;
 }
 .h4-i,
 .h4-i * {
-  font-family: 'Recoleta', sans-serif;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 100%;
 }
 .h5-i,
 .h5-i * {
-  font-family: 'Recoleta', sans-serif;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 110%;
   text-transform: uppercase;
 }
 .h6-i,
 .h6-i * {
-  font-family: 'Recoleta', sans-serif;
+  font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 110%;
   text-transform: uppercase;
@@ -300,6 +307,11 @@ body.dark ._btn._1._light>._real svg path {
   }
 
   /* Paragraphs */
+  .button-primary-i {
+    font-size: 5vw;
+    line-height: 120%;
+  }
+
   .p1-i,
   .p1-i * {
     font-size: 1.12vw; /* text-1 */
@@ -497,6 +509,10 @@ body.dark ._btn._1._light>._real svg path {
     letter-spacing: 0.015vw;
   }
   
+  .button-primary-i {
+    font-size: 5vw;
+    line-height: 120%;
+  }
   ._full ._header {
     margin-bottom: 1vw;
   }
@@ -600,6 +616,10 @@ body.dark ._btn._1._light>._real svg path {
     font-size: 1.5vw !important;
   }
   
+  .button-primary-i {
+    font-size: 5vw;
+    line-height: 120%;
+  }
   /* Headings */
   .h1-i,
   .h1-i * {
@@ -766,6 +786,11 @@ body.dark ._btn._1._light>._real svg path {
   section._master ._subtitle,
   ._item ._detail {
     font-size: 1rem;
+  }
+  
+  .button-primary-i {
+    font-size: 5vw;
+    line-height: 120%;
   }
   ._item ._detail{
     margin-top:0;
@@ -938,6 +963,11 @@ body.dark ._btn._1._light>._real svg path {
 @media(max-width:575px) {
   section._master ._full>._header ._title {
     font-size: 4.375rem;
+  }
+  
+  .button-primary-i {
+    font-size: 5vw;
+    line-height: 120%;
   }
   section._master ._subtitle,
   ._item ._detail {

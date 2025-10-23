@@ -80,11 +80,10 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
   };
 
   const renderCarouselView = () => (
-    <div style={{ padding: '0 20px' }}>
       <Swiper
         slidesPerView={'auto'}
         centeredSlides={true}
-        spaceBetween={16}
+        spaceBetween={5}
         className="discover-swiper"
       >
         {birds.map((bird) => (
@@ -95,28 +94,9 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
               onKeyDown={(e) => { if (e.key === 'Enter') handleBirdClick(bird.id); }}
               tabIndex={0}
               className="discover-card"
-              style={{
-                borderRadius: '16px',
-                overflow: 'hidden',
-                cursor: 'pointer',
-                height: '280px',
-                display: 'flex',
-                flexDirection: 'column',
-                position: 'relative',
-                backgroundColor: 'white',
-                width: '80vw',
-                maxWidth: '300px'
-              }}
             >
               <div 
                 className="discover-card-image-wrapper"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  zIndex: 0
-                }}
               >
                 <img
                   src={bird.image_url || '/assets/default-bird.svg'}
@@ -155,39 +135,24 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
                   padding: '20px'
                 }}
               >
-                <div style={{ color: 'white' }}>
-                  <h3 style={{ 
-                    fontWeight: '600', 
-                    marginBottom: '4px',
-                    fontSize: '18px',
-                    textTransform: 'capitalize'
-                  }}>
+                <div className="discover-card-overlay-content">
+                  <h3 className="h1-i _rgl light-i">
                     {bird.name}
                   </h3>
                   {bird.scientific_name && (
-                    <p style={{ 
-                      fontSize: '14px', 
-                      fontStyle: 'italic',
-                      marginBottom: '8px',
-                      opacity: 0.9
-                    }}>
+                    <p className="h4-i _lgt light-i">
                       {bird.scientific_name}
                     </p>
                   )}
-                  <div style={{ 
-                    fontSize: '12px', 
-                    opacity: 0.8,
-                    fontWeight: '500'
-                  }}>
-                    Conoce esta ave
-                  </div>
+                  <button className="button-primary-i">
+                    <span className="button-primary-i-text">Conoce esta ave</span>
+                  </button>
                 </div>
               </div>
             </div>
           </SwiperSlide>
         ))}
       </Swiper>
-    </div>
   );
 
   if (loading) {
@@ -224,68 +189,31 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
   }
 
   return (
-    <section style={{ marginBottom: '24px' }}>
-      <h2 style={{ 
-        fontSize: '20px', 
-        fontWeight: '600', 
-        marginBottom: '16px',
-        padding: '0 16px'
-      }}>
-        Aves ({birds.length})
-      </h2>
-      
+    <section className="discover-widget-i">      
       {viewMode === 'list' ? (
-        <IonList>
+        <div className="discover-bird-list">
           {birds.map((bird) => (
-            <IonItem 
+            <div className="discover-bird-item" 
               key={bird.id} 
-              button 
               onClick={() => handleBirdClick(bird.id)}
-              style={{ '--padding-start': '16px' }}
             >
-              <IonThumbnail slot="start" style={{ width: '60px', height: '60px' }}>
-                {bird.image_url ? (
-                  <img 
-                    src={bird.image_url} 
-                    alt={bird.name}
-                    style={{ 
-                      width: '100%', 
-                      height: '100%', 
-                      objectFit: 'cover',
-                      borderRadius: '8px'
-                    }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '100%',
-                    height: '100%',
-                    backgroundColor: '#f0f0f0',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '24px'
-                  }}>
-                    🐦
-                  </div>
-                )}
-              </IonThumbnail>
+              <div className="discover-bird-image" >
+                <img src={bird.image_url || '/assets/default-bird.svg'} alt={bird.name} />
+                  
+              </div>
               
-              <IonLabel>
-                <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>
-                  {bird.name}
-                </h2>
-                {bird.scientific_name && (
-                  <p style={{ 
-                    fontSize: '14px', 
-                    color: '#666', 
-                    fontStyle: 'italic',
-                    marginBottom: '4px'
-                  }}>
-                    {bird.scientific_name}
-                  </p>
-                )}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div className="discover-bird-info">
+                <div className="discover-bird-info-header">
+                  <h2 className="h3-i _bld primary-i">
+                    {bird.name}
+                  </h2>
+                  {bird.scientific_name && (
+                    <p className="p2-ii _lgt primary-i">
+                      {bird.scientific_name}
+                    </p>
+                  )}
+                </div>
+                {/* <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <IonChip 
                     color={getRarityColor(Number(bird.rarity) || 0)} 
                     className="chip-small"
@@ -297,11 +225,11 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
                       Popularidad: {bird.popularity}
                     </IonText>
                   )}
-                </div>
-              </IonLabel>
-            </IonItem>
+                </div> */}
+              </div>
+            </div>
           ))}
-        </IonList>
+        </div>
       ) : (
         renderCarouselView()
       )}

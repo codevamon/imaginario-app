@@ -1,11 +1,7 @@
 /* Estilos para el carrusel de DiscoverBirdsWidget */
-.discover-swiper {
-  padding: 0 20px;
-}
 
 .discover-swiper-slide {
-  width: 80vw;
-  max-width: 300px;
+  width: 90vw;
 }
 
 .discover-card {
@@ -21,6 +17,76 @@
   outline-offset: 2px;
 }
 
+.discover-bird-info {
+  display: flex;
+  align-items: center;
+}
+.discover-bird-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 0.1vw solid #e5e9ea;
+  padding: 5%;
+}
+.discover-bird-info {
+  width: calc(60% - 0.5vw);
+  padding: 4%;
+}
+.discover-bird-info .p2-ii {
+  margin: 0;
+}
+.discover-bird-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}  
+.discover-bird-image {
+  width: 20vw;
+  height: 20vw;
+  border-radius: 2vw;
+  overflow: hidden;
+}
+.discover-card-image-wrapper {
+  height: 65vh;
+  border-radius: 7vw;
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
+}
+.discover-card-overlay {
+  position: absolute;
+  inset: 0px;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  align-items: end;
+  padding: 6% 5%;
+}
+.discover-card-overlay-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1vw;
+  width: 100%;
+}
+.discover-card-overlay-content .h1-i {
+  margin: 0;
+}
+.discover-card-overlay-content .h4-i{
+  margin: 0 0 5vw;
+}
+.discover-card-overlay-content .button-primary-i {
+  width: 100%;
+} 
+.button-primary-i {
+  background: #B6DB78;
+  padding: 4vw 8vw;
+  border-radius: 10vw;
+  width: 100%;
+  text-align: center;
+  font-family: 'Graphik', sans-serif;
+  font-weight: 400;
+  line-height: 120%;
+  color: #073a35;
+}
 /* Transiciones suaves para el swiper */
 .swiper-slide {
   transition: transform 0.4s cubic-bezier(0,1.19,.58,.94);

@@ -1,10 +1,20 @@
 /* === Search Widget === */
 .search-widget-i {
-  padding: 15vw 5vw 5vw;
+  padding: 15vw 5vw 2.5vw;
+}
+
+.search-widget-title {
+  width: calc(70% - 0.5vw);
+}
+.search-widget-buttons {
+  width: calc(30% - 0.5vw);
 }
 
 .search-widget-header {
   margin-bottom: 4vw;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1vw;
 }
 
 .search-widget-title .h1-i {
@@ -57,19 +67,6 @@
   align-items: center;
 }
 
-.search-widget-button {
-  --padding-start: 8px;
-  --padding-end: 8px;
-  --padding-top: 8px;
-  --padding-bottom: 8px;
-  min-width: 40px;
-  height: 40px;
-}
-
-.search-widget-button ion-icon {
-  font-size: 20px;
-  color: var(--ion-color-primary, #0A3731);
-}
 
 /* Filtros */
 .search-widget-filters {

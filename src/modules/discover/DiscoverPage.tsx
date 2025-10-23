@@ -97,7 +97,7 @@ const DiscoverPage: React.FC = () => {
           viewMode={viewMode}
         />
         
-        <DiscoverSingsWidget 
+        {/* <DiscoverSingsWidget 
           searchTerm={searchTerm}
           orderFilter={orderFilter as 'name' | 'updated_at'}
           rarityFilter={rarityFilter ? parseInt(rarityFilter) : undefined}
@@ -123,7 +123,7 @@ const DiscoverPage: React.FC = () => {
           orderFilter={orderFilter as 'name' | 'updated_at'}
           rarityFilter={rarityFilter ? parseInt(rarityFilter) : undefined}
           popularityFilter={popularityFilter as 'asc' | 'desc' | undefined}
-        />
+        /> */}
       </IonContent>
     </IonPage>
   );
