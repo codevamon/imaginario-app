@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './AccordionI.css';
+import MinusIcon from '../assets/icons/Minus.svg';
+import PlusIcon from '../assets/icons/Plus.svg';
 
 type Props = {
   title: string;
@@ -49,7 +51,7 @@ const AccordionI: React.FC<Props> = ({ title, children, defaultOpen = false }) =
           <h3 className="p1-i _rgl">{title}</h3>
           <span className="accordion-icon-i">
             <img
-              src={open ? '/src/assets/icons/Minus.svg' : '/src/assets/icons/Plus.svg'}
+              src={open ? MinusIcon : PlusIcon}
               alt={open ? 'Cerrar' : 'Abrir'}
             />
           </span>

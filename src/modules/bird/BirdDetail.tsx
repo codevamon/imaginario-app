@@ -37,6 +37,7 @@ import BirdMusiciansWidget from './widgets/BirdMusiciansWidget';
 import BirdInterviewsWidget from './widgets/BirdInterviewsWidget';
 import './widgets/bird-widgets.css';
 import AccordionI from '../../ui/AccordionI';
+import ArrowLeft from '../../assets/icons/ArrowLeft.svg';
 
 const BirdDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -193,7 +194,7 @@ const BirdDetail: React.FC = () => {
       <IonContent>
         <div className="bird-i">
           <div className="btn-back" onClick={() => window.history.back()}>
-            <img src="/src/assets/icons/ArrowLeft.svg" alt="Volver" />
+            <img src={ArrowLeft} alt="Volver" />
           </div>
           <div className="bird-pictures">
             
