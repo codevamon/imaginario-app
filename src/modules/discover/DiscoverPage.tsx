@@ -8,13 +8,14 @@ import { useLocation } from 'react-router-dom';
 
 // Importar los widgets
 import SearchWidget from './widgets/SearchWidget';
-import DiscoverBirdsWidget from './DiscoverBirdsWidget';
-import DiscoverSingsWidget from './DiscoverSingsWidget';
-import DiscoverTracksWidget from './DiscoverTracksWidget';
-import DiscoverMusiciansWidget from './DiscoverMusiciansWidget';
-import DiscoverInterviewsWidget from './DiscoverInterviewsWidget';
+import DiscoverBirdsWidget from './widgets/DiscoverBirdsWidget';
+import DiscoverSingsWidget from './widgets/DiscoverSingsWidget';
+import DiscoverTracksWidget from './widgets/DiscoverTracksWidget';
+import DiscoverMusiciansWidget from './widgets/DiscoverMusiciansWidget';
+import DiscoverInterviewsWidget from './widgets/DiscoverInterviewsWidget';
 
 const DiscoverPage: React.FC = () => {
+  // Nota: Esta página no tiene IonRefresher, por lo tanto no aplica el auto-refresh
   const router = useIonRouter();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,8 +69,8 @@ const DiscoverPage: React.FC = () => {
     <IonPage>
       <IonContent>
         <SearchWidget
-          title="Discover"
-          subtitle="Explora la diversidad de aves"
+          title="Guía de Aves"
+          subtitle="Consulta las especies registradas."
           searchTerm={searchTerm}
           onSearchChange={handleSearchChange}
           onSubmitSearch={handleSubmitSearch}

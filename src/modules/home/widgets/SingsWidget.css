@@ -7,19 +7,23 @@
 }
 
 .track-card-i {
-  background: var(--ion-background-color, #fff);
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
   display: flex;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  transition: background 0.3s ease;
 }
 
-.track-card-i:hover {
-  background: rgba(0,0,0,0.03);
-}
 
+.in-track-card-progress{
+  border-top: 0.1vw solid #B5B7C4;
+}
+.tracks-widget-i.tracks-widget .track-card-i .track-card-info {
+  border-bottom: 0.1vw solid #B5B7C4;
+}
+.tracks-widget-i.tracks-widget .track-card-i .track-card-info .track-card-accordion .in-track-card-progress{
+  margin-top: 2vw;
+}
+.in-track-card-info{
+  padding-bottom: 3vw;
+}
 .track-card-icon {
   width: 40px;
   height: 40px;
@@ -114,14 +118,14 @@
 
 /* Cuando el sing está en reproducción */
 .track-card-accordion.open {
-  max-height: 60px; /* altura suficiente para barra + tiempos */
+  max-height: 20vw; /* altura suficiente para barra + tiempos */
   opacity: 1;
 }
 
 /* Contenido interno */
 .in-track-card-progress {
-  padding-top: 8px;
-  padding-bottom: 4px;
+  padding-top: 5vw;
+  padding-bottom: 5vw;
   transition: opacity 0.3s ease;
 }
 

@@ -28,6 +28,7 @@ type FavoriteBird = {
 };
 
 const ProfilePage: React.FC = () => {
+  // Nota: Esta página no tiene IonRefresher, por lo tanto no aplica el auto-refresh
   const router = useIonRouter();
   const [deviceId, setDeviceId] = useState<string>('');
   const [favorites, setFavorites] = useState<FavoriteBird[]>([]);

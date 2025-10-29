@@ -1,10 +1,10 @@
-// src/modules/home/BirdSlideCard.tsx
+// src/modules/home/widgets/BirdSlideCard.tsx
 import React from 'react';
-import { useCachedImage } from '../../core/cache/useCachedImage';
-import { Badge } from '../../ui/Badge';
-import { FavToggle } from '../../ui/FavToggle';
-import { PlayButton } from '../../ui/PlayButton';
-import type { Bird } from '../../core/db/dao/birds';
+import { useCachedImage } from '../../../core/cache/useCachedImage';
+import { Badge } from '../../../ui/Badge';
+import { FavToggle } from '../../../ui/FavToggle';
+import { PlayButton } from '../../../ui/PlayButton';
+import type { Bird } from '../../../core/db/dao/birds';
 
 export default function BirdSlideCard({ b, onClick }: { b: Bird; onClick?: (id: string) => void }) {
   const bg = useCachedImage(b.image_url);

@@ -1,11 +1,11 @@
-// src/modules/home/TracksWidget.tsx
+// src/modules/home/widgets/TracksWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { play, pause } from 'ionicons/icons';
 import { IonIcon } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
-import type { Track } from '../../core/db/dao/tracks';
-import { audioManager } from '../../core/audio/player';
-import { useAudioProgress } from '../../core/audio/useAudioProgress';
+import type { Track } from '../../../core/db/dao/tracks';
+import { audioManager } from '../../../core/audio/player';
+import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import './TracksWidget.css';
 
 type Props = {
@@ -54,9 +54,9 @@ const TrackCard: React.FC<TrackCardProps> = ({ track, isPlaying, onToggle }) => 
 
       <div className="track-card-info">
         <div className="in-track-card-info">
-          <div className="track-card-title">{track.title || 'Sin t√≠tulo'}</div>
+          <div className="track-card-title h3-i _mdm primary-i">{track.title || 'Sin t√≠tulo'}</div>
           {track.interpreters && (
-            <div className="track-card-subtitle">{track.interpreters}</div>
+            <div className="track-card-subtitle h4-i _lgt primary-i">{track.interpreters}</div>
           )}
           <div className="l2-i _rgl primary-i">
             {[track.community, track.instruments, track.author]
@@ -111,7 +111,7 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su m√
   };
 
   return (
-    <div className="tracks-widget-i">
+    <div className="tracks-widget-i tracks-widget">
       <div className="in-widget-header">
         <div className="_flex">
           <div className="_base _1">
@@ -120,7 +120,7 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su m√
             </h2>
           </div>
           <div className="_base _2">
-            <button className="btn-i" onClick={() => router.push('/discover?filter=tracks')}>
+            <button className="btn-i l2-i" onClick={() => router.push('/music')}>
               <span>Ver m√°s</span>
             </button>
           </div>

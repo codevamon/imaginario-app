@@ -1,0 +1,85 @@
+.accordion-i {
+  position: relative;
+}
+.accordion-icon-i {
+  width: 5vw;
+  height: 5vw;
+}
+.accordion-icon-i img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.3s cubic-bezier(0.45, 0, 0.25, 1);
+}
+.accordion-header-i {
+  padding: 0 3%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.45, 0, 0.25, 1);
+}
+
+.bird-accordions .accordion-i:first-of-type .accordion-header-i .accordion-header-i-content{
+  border-top: 0.1vw solid #E0E0E0;
+}
+.bird-accordions .accordion-i:last-child .accordion-header-i .accordion-header-i-content{
+  border-bottom: none;
+}
+.accordion-header-i .accordion-header-i-content {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  border-bottom: 0.1vw solid #E0E0E0;
+  padding: 5vw 0;
+}
+.accordion-content-i {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.3s ease;
+}
+.accordion-i.open .accordion-content-i {
+  opacity: 1;
+}
+.accordion-body-i {
+  padding: 3%;
+}
+.accordion-line{
+  border-bottom: 0.1vw solid #E0E0E0;
+  display: block;
+  width: 94%;
+  margin: 0 auto;
+}
+.accordion-i.open .accordion-icon-i img {
+  transform: rotate(180deg);
+}
+.bird-i .btn-back {
+  position: absolute;
+  z-index: 3;
+  top: 3vw;
+  left: 3vw;
+}
+.swiper-pagination.swiper-pagination-clickable.swiper-pagination-bullets.swiper-pagination-horizontal.swiper-pagination-lock {
+  bottom: 14vw;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  height: 4vw;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.swiper-pagination.swiper-pagination-clickable.swiper-pagination-bullets.swiper-pagination-horizontal.swiper-pagination-lock .swiper-pagination-bullet.swiper-pagination-bullet-active {
+  width: 2vw;
+  height: 2vw;
+  background: #159778;
+  display: block !important;
+  opacity: 1;
+}
+.swiper-pagination.swiper-pagination-clickable.swiper-pagination-bullets.swiper-pagination-horizontal.swiper-pagination-lock .swiper-pagination-bullet {
+  background: #E5E9EA;
+  width: 2vw;
+  height: 2vw;
+}

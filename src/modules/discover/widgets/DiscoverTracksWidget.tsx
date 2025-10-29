@@ -1,24 +1,25 @@
-// src/modules/discover/DiscoverSingsWidget.tsx
+// src/modules/discover/DiscoverTracksWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { IonList, IonItem, IonLabel, IonText, IonIcon } from '@ionic/react';
 import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
-import { listSings, type Sing } from '../../core/db/dao/sings';
-import { audioManager } from '../../core/audio/player';
-import { useAudioProgress } from '../../core/audio/useAudioProgress';
+import { listTracks, type Track } from '../../../core/db/dao/tracks';
+import { audioManager } from '../../../core/audio/player';
+import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 
 type Props = {
   searchTerm?: string;
   orderFilter?: 'name' | 'updated_at';
   rarityFilter?: number;
   popularityFilter?: 'asc' | 'desc';
+  instrumentsFilter?: string[];
 };
 
-const SingCard: React.FC<{
-  sing: Sing;
+const TrackCard: React.FC<{
+  track: Track;
   isPlaying: boolean;
   onToggle: (id: string, url: string) => void;
-}> = ({ sing, isPlaying, onToggle }) => {
+}> = ({ track, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
 
   const formatTime = (sec?: number) => {
@@ -31,7 +32,7 @@ const SingCard: React.FC<{
   return (
     <IonItem 
       button 
-      onClick={() => onToggle(sing.id, sing.audio_url!)}
+      onClick={() => onToggle(track.id, track.audio_url!)}
       style={{ '--padding-start': '16px' }}
     >
       <IonIcon 
@@ -42,26 +43,31 @@ const SingCard: React.FC<{
       
       <IonLabel>
         <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>
-          {sing.title || 'Canto sin título'}
+          {track.title || 'Sin título'}
         </h2>
-        {sing.author && (
+        {track.interpreters && (
           <p style={{ 
             fontSize: '14px', 
             color: '#666',
             marginBottom: '4px'
           }}>
-            {sing.author}
+            {track.interpreters}
           </p>
         )}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {sing.community && (
+          {track.community && (
             <IonText style={{ fontSize: '12px', color: '#666' }}>
-              {sing.community}
+              {track.community}
             </IonText>
           )}
-          {sing.instruments && (
+          {track.instruments && (
             <IonText style={{ fontSize: '12px', color: '#666' }}>
-              {sing.instruments}
+              {track.instruments}
+            </IonText>
+          )}
+          {track.author && (
+            <IonText style={{ fontSize: '12px', color: '#666' }}>
+              {track.author}
             </IonText>
           )}
         </div>
@@ -99,57 +105,56 @@ const SingCard: React.FC<{
   );
 };
 
-const DiscoverSingsWidget: React.FC<Props> = ({ 
+const DiscoverTracksWidget: React.FC<Props> = ({ 
   searchTerm = '', 
   orderFilter = 'name', 
   rarityFilter, 
-  popularityFilter 
+  popularityFilter,
+  instrumentsFilter 
 }) => {
-  const [sings, setSings] = useState<Sing[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
-  const [playingSing, setPlayingSing] = useState<string | null>(null);
+  const [playingTrack, setPlayingTrack] = useState<string | null>(null);
   const router = useIonRouter();
 
   useEffect(() => {
-    const loadSings = async () => {
+    const loadTracks = async () => {
       try {
         setLoading(true);
-        console.log('[DiscoverSingsWidget] Cargando cantos con filtros:', {
+        console.log('[DiscoverTracksWidget] Cargando pistas con filtros:', {
           search: searchTerm,
-          order: orderFilter === 'name' ? 'title' : 'updated_at'
+          order: orderFilter === 'name' ? 'title' : 'updated_at',
+          instruments: instrumentsFilter
         });
         
-        const singsData = await listSings({
+        const tracksData = await listTracks({
           search: searchTerm,
-          order: orderFilter === 'name' ? 'title' : 'updated_at'
+          order: orderFilter === 'name' ? 'title' : 'updated_at',
+          instruments: instrumentsFilter
         });
         
-        setSings(singsData);
-        console.log('[DiscoverSingsWidget] ✅ Cantos cargados:', singsData.length);
+        setTracks(tracksData);
+        console.log('[DiscoverTracksWidget] ✅ Pistas cargadas:', tracksData.length);
       } catch (error) {
-        console.error('[DiscoverSingsWidget] ❌ Error cargando cantos:', error);
-        setSings([]);
+        console.error('[DiscoverTracksWidget] ❌ Error cargando pistas:', error);
+        setTracks([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadSings();
-  }, [searchTerm, orderFilter]);
+    loadTracks();
+  }, [searchTerm, orderFilter, instrumentsFilter]);
 
-  // Suscribirse a cambios del audioManager
+  // Escuchar cambios globales en el audioManager
   useEffect(() => {
-    const unsubscribe = audioManager.onChange((playingId) => {
-      setPlayingSing(playingId);
-    });
-    
-    setPlayingSing(audioManager.getPlayingId());
-    
-    return unsubscribe;
+    const unsub = audioManager.onChange((playingId) => setPlayingTrack(playingId));
+    setPlayingTrack(audioManager.getPlayingId());
+    return unsub;
   }, []);
 
-  const handlePlaySing = (singId: string, url: string) => {
-    audioManager.toggle(singId, url);
+  const handlePlayTrack = (trackId: string, url: string) => {
+    audioManager.toggle(trackId, url);
   };
 
   if (loading) {
@@ -162,12 +167,12 @@ const DiscoverSingsWidget: React.FC<Props> = ({
         flexDirection: 'column',
         gap: '16px'
       }}>
-        <IonText>Cargando cantos...</IonText>
+        <IonText>Cargando pistas...</IonText>
       </div>
     );
   }
 
-  if (sings.length === 0) {
+  if (tracks.length === 0) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -179,7 +184,7 @@ const DiscoverSingsWidget: React.FC<Props> = ({
         padding: '20px'
       }}>
         <IonText color="medium">
-          {searchTerm ? 'No se encontraron cantos con ese término' : 'No hay cantos disponibles'}
+          {searchTerm ? 'No se encontraron pistas con ese término' : 'No hay pistas disponibles'}
         </IonText>
       </div>
     );
@@ -193,16 +198,16 @@ const DiscoverSingsWidget: React.FC<Props> = ({
         marginBottom: '16px',
         padding: '0 16px'
       }}>
-        Cantos ({sings.length})
+        Pistas ({tracks.length})
       </h2>
       
       <IonList>
-        {sings.map((sing) => (
-          <SingCard
-            key={sing.id}
-            sing={sing}
-            isPlaying={playingSing === sing.id}
-            onToggle={handlePlaySing}
+        {tracks.map((track) => (
+          <TrackCard
+            key={track.id}
+            track={track}
+            isPlaying={playingTrack === track.id}
+            onToggle={handlePlayTrack}
           />
         ))}
       </IonList>
@@ -210,4 +215,4 @@ const DiscoverSingsWidget: React.FC<Props> = ({
   );
 };
 
-export default DiscoverSingsWidget;
+export default DiscoverTracksWidget;

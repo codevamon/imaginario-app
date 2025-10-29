@@ -5,7 +5,7 @@ import { useIonRouter } from '@ionic/react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import './DiscoverBirdsWidget.css';
-import { listBirds, type Bird } from '../../core/db/dao/birds';
+import { listBirds, type Bird } from '../../../core/db/dao/birds';
 
 type Props = {
   searchTerm?: string;

@@ -1,11 +1,11 @@
-// src/modules/home/SingsWidget.tsx
+// src/modules/home/widgets/SingsWidget.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { play, pause } from 'ionicons/icons';
 import { IonIcon, IonText } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
-import type { Sing } from '../../core/db/dao/sings';
-import { audioManager } from '../../core/audio/player';
-import { useAudioProgress } from '../../core/audio/useAudioProgress';
+import type { Sing } from '../../../core/db/dao/sings';
+import { audioManager } from '../../../core/audio/player';
+import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import './SingsWidget.css';
 
 type Props = {
@@ -60,11 +60,11 @@ const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
 
       <div className="track-card-info">
         <div className="in-track-card-info">
-          <div className="track-card-title">{sing.title || 'Canto sin título'}</div>
+          <div className="track-card-title h3-i _mdm primary-i">{sing.title || 'Canto sin título'}</div>
           {sing.author && (
-            <div className="track-card-subtitle">{sing.author}</div>
+            <div className="track-card-subtitle h4-i _lgt primary-i">{sing.author}</div>
           )}
-          <div className="l2-i _rgl primary-i">
+          <div className="l2-i p2-i _rgl primary-i">
             {[
               sing.community,
               sing.instruments,
@@ -125,7 +125,7 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
   };
 
   return (
-    <div className="tracks-widget-i">
+    <div className="tracks-widget-i sings-widget">
       <div className="in-widget-header">
         <div className="_flex">
           <div className="_base _1">
@@ -134,7 +134,7 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
             </h2>
           </div>
           <div className="_base _2">
-            <button className="btn-i" onClick={() => router.push('/discover?filter=sings')}>
+            <button className="btn-i l2-i" onClick={() => router.push('/music')}>
               <span>Ver más</span>
             </button>
           </div>

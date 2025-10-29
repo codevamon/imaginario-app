@@ -100,7 +100,7 @@ section._master ._item ._detail {
   stroke: #191919;
 }
 
-
+/* ⚠️ DARK MODE DESACTIVADO - Forzamos siempre modo claro
 body.dark ._btn._1._dark>._real {
   background: #FFFEF5;
 }
@@ -119,6 +119,7 @@ body.dark ._btn._1._light>._real>* {
 body.dark ._btn._1._light>._real svg path {
   stroke: #FFFEF5;
 }
+*/
 .primary-i,
 .primary-i *{
   color: var(--ion-color-primary, #0A3731);
@@ -177,6 +178,12 @@ body.dark ._btn._1._light>._real svg path {
 ._uppercase{
   text-transform:uppercase;
 }
+.s1-i,
+.s1-i * {
+  font-family: 'Graphik', sans-serif;
+  font-style: normal;
+  line-height: 120%;
+}
 .h1-i,
 .h1-i * {
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
@@ -194,7 +201,6 @@ body.dark ._btn._1._light>._real svg path {
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
   font-style: normal;
   line-height: 100%;
-  font-weight: 600;
 }
 .h4-i,
 .h4-i * {
@@ -270,6 +276,11 @@ body.dark ._btn._1._light>._real svg path {
     font-size: 1vw !important;
   }
   
+  .s1-i,
+  .s1-i * {
+    font-size: 2vw;
+    line-height: 120%;
+  }
   .h1-i,
   .h1-i * {
     font-size: 5vw;   /* title-1 */
@@ -432,6 +443,11 @@ body.dark ._btn._1._light>._real svg path {
     font-size: 1vw !important;
   }
   /* Headings */
+  .s1-i,
+  .s1-i * {
+    font-size: 2.5vw;
+    line-height: 120%;
+  }
   .h1-i,
   .h1-i * {
     font-size: 4vw;   /* ajustado de title-1 */
@@ -621,6 +637,12 @@ body.dark ._btn._1._light>._real svg path {
     line-height: 120%;
   }
   /* Headings */
+  
+  .s1-i,
+  .s1-i * {
+    font-size: 3vw;
+    line-height: 120%;
+  }
   .h1-i,
   .h1-i * {
     font-size: 6vw;   /* reducido respecto a desktop */
@@ -802,6 +824,12 @@ body.dark ._btn._1._light>._real svg path {
     font-size: 3vw !important;
   }
   /* Headings */
+  
+  .s1-i,
+  .s1-i * {
+    font-size: 4vw;
+    line-height: 120%;
+  }
   .h1-i,
   .h1-i * {
     font-size: 7.5vw;
@@ -984,59 +1012,63 @@ body.dark ._btn._1._light>._real svg path {
   }
   
   /* Headings */
+  .s1-i,
+  .s1-i * {
+    font-size: 7vw;
+    line-height: 120%;
+  }
   .h1-i,
   .h1-i * {
-    font-size: 28px;
+    font-size: 10vw;
     line-height: 1;
   }
 
   .h2-i,
   .h2-i * {
-    font-size: 24px;
+    font-size: 7vw;
     line-height: 1.05;
   }
 
   .h3-i,
   .h3-i * {
-    font-size: 20px;
+    font-size: 6vw;
     line-height: 115%;
   }
 
   .h4-i,
   .h4-i * {
-    font-size: 18px;
+    font-size: 4.5vw;
     line-height: 120%;
   }
 
   .h5-i,
   .h5-i * {
-    font-size: 16px;
+    font-size: 2.2vw;
     line-height: 125%;
   }
 
   .h6-i,
   .h6-i * {
-    font-size: 16px;
+    font-size: 2vw;
     line-height: 125%;
   }
 
   /* Paragraphs */
   .p1-i,
   .p1-i * {
-    font-size: 15px;
+    font-size: 4.7vw;
     line-height: 140%;
   }
 
   .p2-i,
   .p2-i * {
-    font-size: 14px;
+    font-size: 4.2vw;
     line-height: 135%;
-    letter-spacing: 0.3px;
   }
 
   .p3-i,
   .p3-i * {
-    font-size: 16px;
+    font-size: 4vw;
     line-height: 135%;
   }
 
@@ -1050,13 +1082,12 @@ body.dark ._btn._1._light>._real svg path {
   /* Labels */
   .l1-i,
   .l1-i * {
-    font-size: 14px;
+    font-size: 4vw;
     line-height: 120%;
   }
-
   .l2-i,
   .l2-i * {
-    font-size: 12px;
+    font-size: 3vw;
     line-height: 120%;
     letter-spacing: 0.25px;
   }

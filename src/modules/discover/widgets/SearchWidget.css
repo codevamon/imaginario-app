@@ -63,8 +63,8 @@
 
 .search-widget-buttons {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  justify-content: end;
+  align-items: start;
 }
 
 
@@ -130,7 +130,5 @@
   }
   
   .search-widget-buttons {
-    justify-content: flex-end;
-    margin-top: 12px;
   }
 }

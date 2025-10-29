@@ -1,11 +1,11 @@
-// src/modules/discover/DiscoverTracksWidget.tsx
+// src/modules/discover/widgets/DiscoverInterviewsWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { IonList, IonItem, IonLabel, IonText, IonIcon } from '@ionic/react';
 import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
-import { listTracks, type Track } from '../../core/db/dao/tracks';
-import { audioManager } from '../../core/audio/player';
-import { useAudioProgress } from '../../core/audio/useAudioProgress';
+import { listInterviews, type Interview } from '../../../core/db/dao/interviews';
+import { audioManager } from '../../../core/audio/player';
+import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 
 type Props = {
   searchTerm?: string;
@@ -14,11 +14,11 @@ type Props = {
   popularityFilter?: 'asc' | 'desc';
 };
 
-const TrackCard: React.FC<{
-  track: Track;
+const InterviewCard: React.FC<{
+  interview: Interview;
   isPlaying: boolean;
   onToggle: (id: string, url: string) => void;
-}> = ({ track, isPlaying, onToggle }) => {
+}> = ({ interview, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
 
   const formatTime = (sec?: number) => {
@@ -31,7 +31,7 @@ const TrackCard: React.FC<{
   return (
     <IonItem 
       button 
-      onClick={() => onToggle(track.id, track.audio_url!)}
+      onClick={() => onToggle(interview.id, interview.audio_url!)}
       style={{ '--padding-start': '16px' }}
     >
       <IonIcon 
@@ -42,33 +42,12 @@ const TrackCard: React.FC<{
       
       <IonLabel>
         <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>
-          {track.title || 'Sin título'}
+          {interview.title || 'Entrevista sin título'}
         </h2>
-        {track.interpreters && (
-          <p style={{ 
-            fontSize: '14px', 
-            color: '#666',
-            marginBottom: '4px'
-          }}>
-            {track.interpreters}
-          </p>
-        )}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {track.community && (
-            <IonText style={{ fontSize: '12px', color: '#666' }}>
-              {track.community}
-            </IonText>
-          )}
-          {track.instruments && (
-            <IonText style={{ fontSize: '12px', color: '#666' }}>
-              {track.instruments}
-            </IonText>
-          )}
-          {track.author && (
-            <IonText style={{ fontSize: '12px', color: '#666' }}>
-              {track.author}
-            </IonText>
-          )}
+          <IonText style={{ fontSize: '12px', color: '#666' }}>
+            ID Ave: {interview.bird_id}
+          </IonText>
         </div>
         
         {isPlaying && (
@@ -104,53 +83,57 @@ const TrackCard: React.FC<{
   );
 };
 
-const DiscoverTracksWidget: React.FC<Props> = ({ 
+const DiscoverInterviewsWidget: React.FC<Props> = ({ 
   searchTerm = '', 
   orderFilter = 'name', 
   rarityFilter, 
   popularityFilter 
 }) => {
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
-  const [playingTrack, setPlayingTrack] = useState<string | null>(null);
+  const [playingInterview, setPlayingInterview] = useState<string | null>(null);
   const router = useIonRouter();
 
   useEffect(() => {
-    const loadTracks = async () => {
+    const loadInterviews = async () => {
       try {
         setLoading(true);
-        console.log('[DiscoverTracksWidget] Cargando pistas con filtros:', {
+        console.log('[DiscoverInterviewsWidget] Cargando entrevistas con filtros:', {
           search: searchTerm,
           order: orderFilter === 'name' ? 'title' : 'updated_at'
         });
         
-        const tracksData = await listTracks({
+        const interviewsData = await listInterviews({
           search: searchTerm,
           order: orderFilter === 'name' ? 'title' : 'updated_at'
         });
         
-        setTracks(tracksData);
-        console.log('[DiscoverTracksWidget] ✅ Pistas cargadas:', tracksData.length);
+        setInterviews(interviewsData);
+        console.log('[DiscoverInterviewsWidget] ✅ Entrevistas cargadas:', interviewsData.length);
       } catch (error) {
-        console.error('[DiscoverTracksWidget] ❌ Error cargando pistas:', error);
-        setTracks([]);
+        console.error('[DiscoverInterviewsWidget] ❌ Error cargando entrevistas:', error);
+        setInterviews([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadTracks();
+    loadInterviews();
   }, [searchTerm, orderFilter]);
 
-  // Escuchar cambios globales en el audioManager
+  // Suscribirse a cambios del audioManager
   useEffect(() => {
-    const unsub = audioManager.onChange((playingId) => setPlayingTrack(playingId));
-    setPlayingTrack(audioManager.getPlayingId());
-    return unsub;
+    const unsubscribe = audioManager.onChange((playingId) => {
+      setPlayingInterview(playingId);
+    });
+    
+    setPlayingInterview(audioManager.getPlayingId());
+    
+    return unsubscribe;
   }, []);
 
-  const handlePlayTrack = (trackId: string, url: string) => {
-    audioManager.toggle(trackId, url);
+  const handlePlayInterview = (interviewId: string, url: string) => {
+    audioManager.toggle(interviewId, url);
   };
 
   if (loading) {
@@ -163,12 +146,12 @@ const DiscoverTracksWidget: React.FC<Props> = ({
         flexDirection: 'column',
         gap: '16px'
       }}>
-        <IonText>Cargando pistas...</IonText>
+        <IonText>Cargando entrevistas...</IonText>
       </div>
     );
   }
 
-  if (tracks.length === 0) {
+  if (interviews.length === 0) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -180,7 +163,7 @@ const DiscoverTracksWidget: React.FC<Props> = ({
         padding: '20px'
       }}>
         <IonText color="medium">
-          {searchTerm ? 'No se encontraron pistas con ese término' : 'No hay pistas disponibles'}
+          {searchTerm ? 'No se encontraron entrevistas con ese término' : 'No hay entrevistas disponibles'}
         </IonText>
       </div>
     );
@@ -194,16 +177,16 @@ const DiscoverTracksWidget: React.FC<Props> = ({
         marginBottom: '16px',
         padding: '0 16px'
       }}>
-        Pistas ({tracks.length})
+        Entrevistas ({interviews.length})
       </h2>
       
       <IonList>
-        {tracks.map((track) => (
-          <TrackCard
-            key={track.id}
-            track={track}
-            isPlaying={playingTrack === track.id}
-            onToggle={handlePlayTrack}
+        {interviews.map((interview) => (
+          <InterviewCard
+            key={interview.id}
+            interview={interview}
+            isPlaying={playingInterview === interview.id}
+            onToggle={handlePlayInterview}
           />
         ))}
       </IonList>
@@ -211,4 +194,4 @@ const DiscoverTracksWidget: React.FC<Props> = ({
   );
 };
 
-export default DiscoverTracksWidget;
+export default DiscoverInterviewsWidget;

@@ -13,7 +13,7 @@ import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
 import '@ionic/react/css/structure.css';
 import '@ionic/react/css/typography.css';
-import '@ionic/react/css/palettes/dark.system.css';
+// import '@ionic/react/css/palettes/dark.system.css'; // ⚠️ DESACTIVADO: Forzamos siempre modo claro
 import './theme/variables.css';
 
 import Tab1 from './pages/Tab1';
@@ -21,9 +21,11 @@ import Tab2 from './pages/Tab2';
 import Tab3 from './pages/Tab3';
 import HomePage from './modules/home/HomePage';
 import DiscoverPage from './modules/discover/DiscoverPage';
+import MusicPage from './modules/music/MusicPage';
 import BirdDetail from './modules/bird/BirdDetail';
 import ProfilePage from './modules/profile/ProfilePage';
 import SyncCenter from './modules/synccenter/SyncCenter';
+import AboutPage from './modules/about/AboutPage';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
 import { pullAllTables } from './core/sync/pull';
 import Footbar from './ui/Footbar';
@@ -69,6 +71,12 @@ const Tabs: React.FC = () => (
 const App: React.FC = () => {
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+
+  // 🌞 Forzar siempre modo claro (light mode)
+  useEffect(() => {
+    document.body.classList.remove('dark');
+    document.documentElement.removeAttribute('data-theme');
+  }, []);
 
   useEffect(() => {
     const initDatabase = async () => {
@@ -177,8 +185,10 @@ const App: React.FC = () => {
           {/* Páginas sin TabBar */}
           <Route exact path="/home" component={HomePage} />
           <Route exact path="/discover" component={DiscoverPage} />
+          <Route exact path="/music" component={MusicPage} />
           <Route exact path="/bird/:id" component={BirdDetail} />
           <Route exact path="/profile" component={ProfilePage} />
+          <Route exact path="/about" component={AboutPage} />
           <Route exact path="/synccenter" component={SyncCenter} />
 
           {/* Layout de tabs */}

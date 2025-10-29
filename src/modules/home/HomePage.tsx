@@ -4,6 +4,7 @@ import {
   IonButtons, IonButton, IonIcon, IonSearchbar, IonSpinner,
   IonToast, IonChip, IonText, IonRefresher, IonRefresherContent
 } from '@ionic/react';
+import { Preferences } from '@capacitor/preferences';
 import { filter, refresh } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
@@ -12,12 +13,12 @@ import { listBirds, type Bird } from '../../core/db/dao/birds';
 import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
 import { getAllSings, type Sing } from '../../core/db/dao/sings';
 
-import SliderWidget from './SliderWidget';
-import WelcomeWidget from './WelcomeWidget';
-import TracksWidget from './TracksWidget';
-import SingsWidget from './SingsWidget';
+import SliderWidget from './widgets/SliderWidget';
+import WelcomeWidget from './widgets/WelcomeWidget';
+import TracksWidget from './widgets/TracksWidget';
+import SingsWidget from './widgets/SingsWidget';
 import 'swiper/css';
-import AboutWidget from './AboutWidget';
+import AboutWidget from './widgets/AboutWidget';
 import ContactWidget from '../../ui/ContactWidget';
 
 export default function HomePage() {
@@ -35,6 +36,25 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Auto-refresh: solo una vez por sesión al abrir la app
+  useEffect(() => {
+    let timer: any;
+    const triggerAutoRefresh = async () => {
+      const { value } = await Preferences.get({ key: 'hasRefreshedOnce' });
+      if (!value) {
+        timer = setTimeout(async () => {
+          const refresher = document.querySelector('ion-refresher');
+          if (refresher) {
+            refresher.dispatchEvent(new CustomEvent('ionRefresh', { bubbles: true }));
+            await Preferences.set({ key: 'hasRefreshedOnce', value: 'true' });
+          }
+        }, 2000);
+      }
+    };
+    triggerAutoRefresh();
+    return () => clearTimeout(timer);
   }, []);
 
   function goDiscover(q?: string) {

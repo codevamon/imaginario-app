@@ -1,0 +1,146 @@
+/* === Music Page - Instruments Filter Section === */
+
+
+.instruments-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.instruments-filter-header .h3-i {
+  margin: 0;
+}
+section.music-search-widget-i .search-widget-title {
+  width: 100%;
+}
+section.instruments-filter-section {
+  display: flex;
+  grid-gap: 5vw;
+}
+
+.instruments-filter-section .instruments-filter-header {
+  padding-left: 5vw;
+}
+.clear-filters-button {
+  background: none;
+  border: none;
+  padding: 1.5vw 3vw;
+  cursor: pointer;
+  color: var(--ion-color-primary, #0A3731);
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.clear-filters-button:hover {
+  opacity: 1;
+  background: rgba(10, 55, 49, 0.05);
+}
+
+.clear-filters-button:active {
+  transform: scale(0.98);
+}
+
+/* Pills Container - Horizontal Scroll */
+.instruments-pills-container {
+  display: flex;
+  gap: 2vw;
+  padding-right: 5vw;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(10, 55, 49, 0.2) transparent;
+}
+
+.instruments-pills-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.instruments-pills-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.instruments-pills-container::-webkit-scrollbar-thumb {
+  background: rgba(10, 55, 49, 0.2);
+  border-radius: 3px;
+}
+
+.instruments-pills-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(10, 55, 49, 0.4);
+}
+
+/* Individual Pill Styling */
+.instrument-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2vw 4vw;
+  border-radius: 50px;
+  background: #D9D9D9;
+  color:#86868a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+  font-family: 'Graphik', sans-serif;
+  line-height: 1;
+}
+
+
+.instrument-pill:active {
+  transform: scale(0.96);
+}
+
+button.clear-filters-button.p2-ii._lgt.primary-i {
+  display: none;
+}
+.instrument-pill.selected {
+  background: #A58654;
+  color:#A58654;
+  box-shadow: 0 2px 8px #A58654);
+}
+
+.instrument-pill.selected .instrument-pill-text {
+  color: #fff;
+  font-weight: 500;
+}
+
+/* Hide native checkbox */
+.instrument-checkbox {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.instrument-pill-text {
+  color: var(--ion-color-primary, #0A3731);
+  font-size: 14px;
+  transition: color 0.2s ease;
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+
+
+  .instruments-pills-container {
+    gap: 12px;
+  }
+
+  .instrument-pill {
+    padding: 8px 16px;
+  }
+
+  .clear-filters-button {
+    padding: 8px 16px;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .instrument-pill-text {
+    font-size: 13px;
+  }
+}
+

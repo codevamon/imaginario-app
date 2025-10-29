@@ -1,11 +1,12 @@
-// src/modules/home/SliderWidget.tsx
+// src/modules/home/widgets/SliderWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { IonText } from '@ionic/react';
+import { useIonRouter } from '@ionic/react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import './SliderWidget.css';
-import type { Bird } from '../../core/db/dao/birds';
-import { getImagesByBirdId } from '../../core/db/dao/bird_images';
+import type { Bird } from '../../../core/db/dao/birds';
+import { getImagesByBirdId } from '../../../core/db/dao/bird_images';
 
 type Props = {
   items?: Bird[];
@@ -14,6 +15,7 @@ type Props = {
 };
 
 const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick }) => {
+  const router = useIonRouter();
   const [displayItems, setDisplayItems] = useState<Bird[]>([]);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick
             </h2>
           </div>
           <div className="_base _2">
-            <button className="btn-i">
+            <button className="btn-i l2-i" onClick={() => router.push('/discover')}>
               <span>Ver más</span>
             </button>
           </div>

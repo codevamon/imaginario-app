@@ -161,14 +161,18 @@ p {
   }
 
   .in-widget-header>._flex ._base._1 {
-    width: 60%;
+    width: 65%;
   }
 
   .in-widget-header>._flex ._base._2 {
-    width: 40%;
+    width: 35%;
     display: flex;
     align-items: center;
     justify-content: end;
+  }
+  .tracks-widget-i .track-card-i .track-card-info .track-card-subtitle {
+    margin-bottom: 1vw;
+    margin-top: 1vw;
   }
 /* END WIDGETS */
 

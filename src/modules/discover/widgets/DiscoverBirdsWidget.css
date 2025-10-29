@@ -28,7 +28,7 @@
   padding: 5%;
 }
 .discover-bird-info {
-  width: calc(60% - 0.5vw);
+  width: calc(100% - 20vw - 0.5vw);
   padding: 4%;
 }
 .discover-bird-info .p2-ii {

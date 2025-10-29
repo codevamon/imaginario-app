@@ -35,7 +35,9 @@
 .about-widget-i .about-card-i .about-card-body .about-card-title {
   margin-bottom: 2vw;
 }
-
+.about-widget-i .in-widget-header>._flex ._base._1 {
+  width: 100%;
+}
 @media(min-width:1200px) {
 .about-widget-i .about-card-i .about-card-image-wrapper {
     min-height: 300px;

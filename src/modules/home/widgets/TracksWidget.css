@@ -15,18 +15,23 @@ button.track-card-icon .track-icon {
   right: -10%;
   margin: 0 auto;
 }
-
+.tracks-widget-i.sings-widget .track-card-icon {
+  color: #159778;
+  border-color: #159778;
+}
 .track-card-i {
   grid-gap: 2vw;
   align-items: center;
+  border-radius: 0;
 }
-
+.in-track-card-info .l2-i{
+  opacity: 0.6;
+}
 .track-list-i {
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  grid-gap: 5vw;
 }
 
 .tracks-widget-i .in-widget-content {

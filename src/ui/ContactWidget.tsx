@@ -28,8 +28,8 @@ const ContactWidget: React.FC = () => {
       </div>
 
       <div className="contact-info">
-        <p className="contact-title">Contáctanos</p>
-        <p className="contact-email">info@avesdelasierra.com</p>
+        <p className="contact-title h2-i _rgl">Contáctanos</p>
+        <p className="contact-email p2-i _rgl">info@avesdelasierra.com</p>
       </div>
     </div>
   );

@@ -1,0 +1,34 @@
+/* ==========================
+   BIRD WIDGETS STYLES
+   ========================== */
+
+.bird-widget {
+  margin-top: 0;
+}
+
+.bird-widget .in-widget-header {
+  display: none; /* Ocultar header "Ver más" en contexto de BirdDetail */
+}
+
+.bird-widget-tracks,
+.bird-widget-sings,
+.bird-widget-interviews,
+.bird-widget-musicians {
+  padding: 0;
+}
+
+/* Ajustar estilos de lista para el contexto del accordion */
+.bird-widget .tracks-widget-i {
+  padding: 0;
+  margin: 0;
+}
+
+.bird-widget .track-list-i {
+  margin: 0;
+  padding: 0;
+}
+
+.bird-widget .in-widget-content {
+  padding: 0;
+}
+

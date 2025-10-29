@@ -1,8 +1,8 @@
-// src/modules/discover/DiscoverMusiciansWidget.tsx
+// src/modules/discover/widgets/DiscoverMusiciansWidget.tsx
 import React, { useEffect, useState } from 'react';
 import { IonList, IonItem, IonLabel, IonText } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
-import { listMusicians, type Musician } from '../../core/db/dao/musicians';
+import { listMusicians, type Musician } from '../../../core/db/dao/musicians';
 
 type Props = {
   searchTerm?: string;

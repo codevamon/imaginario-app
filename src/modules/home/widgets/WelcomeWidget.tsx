@@ -1,4 +1,4 @@
-// src/modules/home/WelcomeWidget.tsx
+// src/modules/home/widgets/WelcomeWidget.tsx
 import React, { useState } from 'react';
 import { IonButton, IonIcon } from '@ionic/react';
 import { search as searchIcon } from 'ionicons/icons';

@@ -93,10 +93,31 @@ export async function getAllTracks(): Promise<Track[]> {
 export async function listTracks(options?: {
   search?: string;
   order?: 'title' | 'updated_at';
+  instruments?: string[];
 }): Promise<Track[]> {
   if (Capacitor.getPlatform() === 'web') {
     console.warn('[dao-tracks] usando fakeTracks en modo web (listTracks)');
-    return fakeTracks;
+    // Aplicar filtros en memoria para modo web
+    let filtered = [...fakeTracks];
+    
+    if (options?.search) {
+      const searchLower = options.search.toLowerCase();
+      filtered = filtered.filter(t => 
+        t.title?.toLowerCase().includes(searchLower) ||
+        t.author?.toLowerCase().includes(searchLower) ||
+        t.community?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    if (options?.instruments && options.instruments.length > 0) {
+      filtered = filtered.filter(t => {
+        if (!t.instruments) return false;
+        const trackInstruments = t.instruments.split(',').map(i => i.trim());
+        return options.instruments!.some(inst => trackInstruments.includes(inst));
+      });
+    }
+    
+    return filtered;
   }
 
   try {
@@ -109,6 +130,18 @@ export async function listTracks(options?: {
       query += ' AND (LOWER(title) LIKE ? OR LOWER(author) LIKE ? OR LOWER(community) LIKE ?)';
       const searchTerm = `%${options.search.toLowerCase()}%`;
       params.push(searchTerm, searchTerm, searchTerm);
+    }
+    
+    // Filtro de instrumentos: el track debe contener al menos uno de los instrumentos seleccionados
+    if (options?.instruments && options.instruments.length > 0) {
+      const instrumentConditions = options.instruments.map(() => 
+        'LOWER(instruments) LIKE ?'
+      ).join(' OR ');
+      query += ` AND (${instrumentConditions})`;
+      
+      options.instruments.forEach(instrument => {
+        params.push(`%${instrument.toLowerCase()}%`);
+      });
     }
     
     if (options?.order === 'title') {
