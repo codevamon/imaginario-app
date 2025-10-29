@@ -236,18 +236,18 @@ const BirdDetail: React.FC = () => {
                 <div>
                   <div className="in-details-item">
                     {bird.size && (
-                      <p>
-                        Tamaño / Damana: <span className="p2-i _rgl">{bird.size}</span>
+                      <p  className="l2-i _rgl">
+                        Tamaño / Damana: <span className="l2-i _rgl">{bird.size}</span>
                       </p>
                     )}
                     {bird.weight && (
-                      <p>
-                        Peso / Damana: <span className="p2-i _rgl">{bird.weight}</span>
+                      <p  className="l2-i _rgl">
+                        Peso / Damana: <span className="l2-i _rgl">{bird.weight}</span>
                       </p>
                     )}
                     {bird.stage && (
-                      <p>
-                        Etapa / Damana: <span className="p2-i _rgl">{bird.stage}</span>
+                      <p  className="l2-i _rgl">
+                        Etapa / Damana: <span className="l2-i _rgl">{bird.stage}</span>
                       </p>
                     )}
                   </div>

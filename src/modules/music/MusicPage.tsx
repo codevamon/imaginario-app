@@ -9,7 +9,7 @@ import { useLocation } from 'react-router-dom';
 
 // Importar los widgets reutilizables
 import SearchWidget from '../discover/widgets/SearchWidget';
-import MusicTracksWidget from './widgets/MusicTracksWidget';
+import TracksWidget from '../home/widgets/TracksWidget';
 import { listTracks, type Track } from '../../core/db/dao/tracks';
 import './MusicPage.css';
 
@@ -196,7 +196,12 @@ const MusicPage: React.FC = () => {
                 <IonText>Cargando pistas...</IonText>
               </div>
             ) : (
-              <MusicTracksWidget items={tracks} />
+              <TracksWidget
+                items={tracks}
+                title="Cantos y Melodías"
+                showViewMore={false}
+                maxItems={Infinity}
+              />
             )}
         </section>
         

@@ -12,6 +12,8 @@ type Props = {
   items?: Track[];
   title?: string;
   onItemClick?: (id: string) => void;
+  showViewMore?: boolean;      // muestra u oculta el botón "Ver más"
+  maxItems?: number;            // limita cantidad de ítems visibles
 };
 
 // Subcomponente individual (idéntico a SingCard)
@@ -87,9 +89,14 @@ const TrackCard: React.FC<TrackCardProps> = ({ track, isPlaying, onToggle }) => 
   );
 };
 
-const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su música', onItemClick }) => {
+const TracksWidget: React.FC<Props> = ({
+  items = [],
+  title = 'Explorar por su música',
+  onItemClick,
+  showViewMore = true,
+  maxItems = 6,
+}) => {
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
-  const [displayTracks, setDisplayTracks] = useState<Track[]>([]);
   const router = useIonRouter();
 
   // Escuchar cambios globales en el audioManager
@@ -99,11 +106,8 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su m�
     return unsub;
   }, []);
 
-  useEffect(() => {
-    if (!items || items.length === 0) return;
-    const shuffled = [...items].sort(() => 0.5 - Math.random());
-    setDisplayTracks(shuffled.slice(0, 3));
-  }, [items]);
+  // Variable derivada: limitar ítems visibles
+  const visibleItems = items.slice(0, maxItems);
 
   const handlePlayTrack = (trackId: string, url: string) => {
     audioManager.toggle(trackId, url);
@@ -120,17 +124,19 @@ const TracksWidget: React.FC<Props> = ({ items = [], title = 'Explorar por su m�
             </h2>
           </div>
           <div className="_base _2">
-            <button className="btn-i l2-i" onClick={() => router.push('/music')}>
-              <span>Ver más</span>
-            </button>
+            {showViewMore && (
+              <button className="btn-i l2-i" onClick={() => router.push('/music')}>
+                <span>Ver más</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       <div className="in-widget-content">
-        {displayTracks && displayTracks.length > 0 ? (
+        {visibleItems && visibleItems.length > 0 ? (
           <ul className="track-list-i">
-            {displayTracks.map((track) => (
+            {visibleItems.map((track) => (
               <TrackCard
                 key={track.id}
                 track={track}
