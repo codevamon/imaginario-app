@@ -2,6 +2,7 @@ import { getDb } from '../../sqlite'
 import { toIso, toIsoOrNull } from './utils/dateHelpers'
 import { Capacitor } from '@capacitor/core'
 import { fakeTracks } from '../fakeData'
+// TODO: agregar columna cached_path TEXT en tracks en la próxima migración.
 
 export type Track = {
   id: string;
@@ -170,5 +171,16 @@ export async function listTracks(options?: {
   } catch (error) {
     console.error('[DAO] listTracks error:', error);
     return [];
+  }
+}
+
+export async function updateCachedPath(id: string, cachedPath: string): Promise<void> {
+  try {
+    const db = await getDb();
+    const query = 'UPDATE tracks SET cached_path = ? WHERE id = ?';
+    await db.run(query, [cachedPath, id]);
+    console.log('[DAO] cached_path actualizado:', id, cachedPath);
+  } catch (err) {
+    console.warn('[DAO] Error al actualizar cached_path:', err);
   }
 }

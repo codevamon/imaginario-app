@@ -1,5 +1,7 @@
 // src/core/audio/player.ts
 // Robust AudioManager singleton: controla 1 <audio> global, normaliza URLs y maneja errores.
+import { cacheAudioFile, getLocalAudioUrl } from './cacheAudioFile';
+import { Network } from '@capacitor/network';
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
 
@@ -7,6 +9,45 @@ interface ProgressData {
   currentTime: number;
   duration: number;
   progress: number;
+}
+
+// Helper insertado: preparar fuente local/offline antes de usar en el reproductor
+async function prepareSource(originalSrc: string, id: string): Promise<string> {
+  try {
+    const { connected } = await Network.getStatus();
+
+    // Si la fuente ya es local (file://), no hacer nada
+    if (originalSrc.startsWith('file://')) return originalSrc;
+
+    // Si estamos offline y no hay conexión, intentar buscar archivo local
+    const fileName = id + '.mp3';
+    const localPath = `audios/${fileName}`;
+
+    if (!connected) {
+      try {
+        const localUrl = await getLocalAudioUrl(localPath);
+        if (localUrl) return localUrl;
+      } catch {
+        console.warn('[AudioManager] Offline, sin archivo local:', localPath);
+      }
+      return originalSrc;
+    }
+
+    // Online: descargar y cachear si no existe
+    const path = await cacheAudioFile(originalSrc, fileName, (p) => {
+      window.dispatchEvent(
+        new CustomEvent('audio:download-progress', {
+          detail: { id, progress: p },
+        })
+      );
+    });
+
+    const localUrl = await getLocalAudioUrl(path);
+    return localUrl || originalSrc;
+  } catch (err) {
+    console.warn('[AudioManager] prepareSource error:', err);
+    return originalSrc;
+  }
 }
 
 class AudioManager {
@@ -162,7 +203,11 @@ class AudioManager {
 
     // crear o reutilizar audio element
     this.audio = this.audio ?? document.createElement('audio');
-    this.audio.src = normalizedSrc;
+
+    // preparar fuente local/offline antes de asignar
+    // Nota: inserción segura justo antes de asignar this.audio.src
+    const preparedSrc = await prepareSource(normalizedSrc, id);
+    this.audio.src = preparedSrc;
     this.audio.preload = 'metadata';
     
     // Exponer el elemento global para acceso desde hooks

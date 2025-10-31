@@ -12,8 +12,8 @@
 
 .contact-icon {
   background-color: #073a35;
-  width: 6vw;
-  height: 6vw;
+  width: 15vw;
+  height: 15vw;
   min-width: 40px;
   min-height: 40px;
   border-radius: 50%;
@@ -24,7 +24,7 @@
 }
 
 .contact-icon svg {
-  width: 2.5vw;
+  width: 9vw;
   height: auto;
   min-width: 20px;
 }
@@ -56,7 +56,7 @@
     font-size: 3.2vw;
   }
   .contact-icon {
-    width: 9vw;
-    height: 9vw;
+    width: 15vw;
+    height: 15vw;
   }
 }

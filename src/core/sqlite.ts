@@ -365,6 +365,21 @@ export async function initDb(): Promise<SQLiteDBConnection> {
     // Aplicar migraciones solo si no se ha hecho antes
     if (!schemaInitialized) {
       await applyMigrations(db)
+      // Ejecutar migración condicional para cached_path
+      await ensureCachedPathColumn()
+      // Verificación inmediata de columnas en tracks
+      try {
+        const res = await db.query(`PRAGMA table_info(tracks)`)
+        const columns = res.values?.map((r: any) => r.name)
+        console.log('[DB Check] Columnas actuales en tracks:', columns)
+        if (columns?.includes('cached_path')) {
+          console.log('[DB Check] ✅ cached_path disponible correctamente')
+        } else {
+          console.warn('[DB Check] ⚠️ cached_path no encontrada — revisar migración')
+        }
+      } catch (err) {
+        console.warn('[DB Check] Error verificando columnas de tracks:', err)
+      }
       schemaInitialized = true
     }
     
@@ -498,4 +513,28 @@ export async function setMetaValue(key: string, value: string) {
 // Función para generar IDs únicos
 export function uid(): string {
   return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+// Migración condicional: asegurar columna cached_path en tablas con audios
+export async function ensureCachedPathColumn() {
+  try {
+    const dbc = await getDb()
+    // Verificar tracks
+    const resTracks = await dbc.query(`PRAGMA table_info(tracks)`)
+    const hasCachedPathTracks = resTracks.values?.some((r: any) => r.name === 'cached_path')
+    if (!hasCachedPathTracks) {
+      await dbc.run(`ALTER TABLE tracks ADD COLUMN cached_path TEXT;`)
+      console.log('[Migration] Columna cached_path añadida en tracks')
+    }
+
+    // Opcional: interviews
+    const resInterviews = await dbc.query(`PRAGMA table_info(interviews)`)
+    const hasCachedPathInterviews = resInterviews.values?.some((r: any) => r.name === 'cached_path')
+    if (!hasCachedPathInterviews) {
+      await dbc.run(`ALTER TABLE interviews ADD COLUMN cached_path TEXT;`)
+      console.log('[Migration] Columna cached_path añadida en interviews')
+    }
+  } catch (err) {
+    console.warn('[Migration] Error verificando/agregando cached_path:', err)
+  }
 }
