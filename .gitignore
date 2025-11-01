@@ -57,3 +57,6 @@ ios/App/DerivedData/
 ios/App/*.xcuserstate
 ios/App/*.xcuserdata
 ios/App/*.xcworkspace
+
+node_modules/
+.ignored_node_modules/
