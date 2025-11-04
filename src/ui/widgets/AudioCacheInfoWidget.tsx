@@ -5,6 +5,7 @@ import { musicalNotesOutline } from 'ionicons/icons';
 // import { updateCachedPath } from '../../core/db/dao/tracks';
 // Nota: no existe export directo de `db`; usamos getDb para ejecutar SQL
 import { getDb } from '../../core/sqlite';
+import { mediaCacheService } from '../../core/cache/mediaCacheService';
 
 /**
  * Muestra el número total de audios cacheados y el tamaño total ocupado en disco.
@@ -22,27 +23,35 @@ const AudioCacheInfoWidget: React.FC = () => {
   useEffect(() => {
     async function calculateCacheInfo() {
       try {
-        const dir = await Filesystem.readdir({
-          directory: Directory.Data,
-          path: 'audios',
-        });
-
-        const files = dir.files || [];
-        let totalBytes = 0;
-        for (const file of files) {
-          try {
-            const stat = await Filesystem.stat({
-              directory: Directory.Data,
-              path: `audios/${file.name}`,
-            });
-            totalBytes += stat.size ?? 0;
-          } catch {
-            // ignorar archivos no legibles
-          }
+        // Usar el nuevo servicio para obtener el tamaño total del caché
+        const size = await mediaCacheService.getCacheSize();
+        const sizeInMB = size / 1024 / 1024;
+        
+        // Mantener compatibilidad: también contar archivos en el directorio antiguo 'audios'
+        let filesCount = 0;
+        try {
+          const dir = await Filesystem.readdir({
+            directory: Directory.Data,
+            path: 'audios',
+          });
+          filesCount = dir.files?.length || 0;
+        } catch {
+          // Si no existe el directorio antiguo, no hay problema
+        }
+        
+        // También contar archivos en el nuevo directorio de audios
+        try {
+          const audioDir = await Filesystem.readdir({
+            directory: Directory.Data,
+            path: 'imaginario/audio',
+          });
+          filesCount += audioDir.files?.length || 0;
+        } catch {
+          // Si no existe el directorio nuevo, no hay problema
         }
 
-        setCount(files.length);
-        setSizeMB(totalBytes / 1024 / 1024);
+        setCount(filesCount);
+        setSizeMB(sizeInMB);
       } catch (err) {
         console.warn('[AudioCacheInfoWidget] Error al obtener info de caché:', err);
         setCount(0);
@@ -57,12 +66,16 @@ const AudioCacheInfoWidget: React.FC = () => {
 
   async function clearCache() {
     try {
-      // 1. Eliminar todos los archivos de audio locales
-      await Filesystem.rmdir({
-        path: 'audios',
-        directory: Directory.Data,
-        recursive: true,
-      });
+      // 1. Eliminar todos los archivos de audio locales (directorio antiguo para compatibilidad)
+      try {
+        await Filesystem.rmdir({
+          path: 'audios',
+          directory: Directory.Data,
+          recursive: true,
+        });
+      } catch (err) {
+        // Si no existe el directorio antiguo, no hay problema
+      }
 
       // 2. Reiniciar las columnas cached_path en SQLite para tracks e interviews
       try {
@@ -75,7 +88,10 @@ const AudioCacheInfoWidget: React.FC = () => {
         console.warn('[AudioCacheInfoWidget] No se pudo limpiar cached_path en alguna tabla:', err);
       }
 
-      // 3. Actualizar el estado visual
+      // 3. Limpiar el nuevo caché de medios (incluye imágenes y audios)
+      await mediaCacheService.clearCache();
+
+      // 4. Actualizar el estado visual
       setCount(0);
       setSizeMB(0);
     } catch (err) {

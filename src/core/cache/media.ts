@@ -1,4 +1,5 @@
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { mediaCacheService } from './mediaCacheService';
 
 const isNative = () => !!(window as any).Capacitor?.isNativePlatform?.();
 
@@ -20,25 +21,9 @@ function blobToBase64(b: Blob) {
 }
 
 export async function cacheImage(url?: string|null): Promise<string|undefined> {
-  if (!url) return undefined;
-  if (!isNative()) return url; // Web: usa URL directa
-  const dir = 'imaginario/images'; await ensureDir(dir);
-  const name = encodeURIComponent(url);
-  const path = `${dir}/${name}`;
-  try { await Filesystem.stat({ path, directory: Directory.Data }); }
-  catch { await downloadTo(path, url); }
-  const uri = await Filesystem.getUri({ path, directory: Directory.Data });
-  return uri.uri;
+  return await mediaCacheService.cacheImage(url);
 }
 
 export async function cacheAudio(url?: string|null): Promise<string|undefined> {
-  if (!url) return undefined;
-  if (!isNative()) return url;
-  const dir = 'imaginario/audio'; await ensureDir(dir);
-  const name = encodeURIComponent(url);
-  const path = `${dir}/${name}`;
-  try { await Filesystem.stat({ path, directory: Directory.Data }); }
-  catch { await downloadTo(path, url); }
-  const uri = await Filesystem.getUri({ path, directory: Directory.Data });
-  return uri.uri;
+  return await mediaCacheService.cacheAudio(url);
 }

@@ -31,6 +31,7 @@ import { pullAllTables } from './core/sync/pull';
 import Footbar from './ui/Footbar';
 import './theme/fonts.css';
 import './theme/global.css';
+import TestCachePage from './pages/TestCachePage';
 
 setupIonicReact();
 
@@ -183,6 +184,7 @@ const App: React.FC = () => {
       <IonReactRouter>
         <IonRouterOutlet id="main">
           {/* Páginas sin TabBar */}
+          <Route path="/test-cache" component={TestCachePage} />
           <Route exact path="/home" component={HomePage} />
           <Route exact path="/discover" component={DiscoverPage} />
           <Route exact path="/music" component={MusicPage} />

@@ -1,6 +1,8 @@
 import React from 'react';
 import { useIonRouter } from '@ionic/react';
 import { useLocation } from 'react-router-dom';
+import { IonFab, IonFabButton, IonIcon } from '@ionic/react';
+import { bug } from 'ionicons/icons';
 import './Footbar.css';
 
 const Footbar: React.FC = () => {
@@ -80,7 +82,27 @@ const Footbar: React.FC = () => {
           </span>
           <span className="l2-i">Acerca</span>
         </div>
+        
+        <div 
+          className={`item-about footbar-item ${isActive('/test-cache') ? 'active' : ''}`} 
+          onClick={() => router.push('/test-cache')}
+        >
+          <span className="icon">
+            <svg width="27" height="23" viewBox="0 0 27 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15.6193 4.90527L26.5646 0.75L19.5827 10.6151L15.1177 11.2685C15.9125 11.3121 17.99 11.6134 18.9293 11.7586L15.6193 14.9168C13.2558 15.1346 8.71405 15.6465 9.4546 15.9514C10.1952 16.2564 13.1755 16.0785 14.5731 15.9514C8.47446 19.3928 5.20732 19.0189 4.33608 18.4018L0.414062 21.6689L3.95502 18.1295C3.65009 13.7733 7.09759 10.0842 8.85945 8.7842L7.76964 13.2695L10.2164 7.90073L14.124 5.42023L13.4577 9.09758L15.6193 4.90527Z" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+
+          </span>
+          <span className="l2-i">Test</span>
+        </div>
+        
       </div>
+
+      <IonFab vertical="bottom" horizontal="end" slot="fixed" style={{ bottom: '90px', right: '16px' }}>
+        <IonFabButton size="small" color="medium" onClick={() => router.push('/test-cache')}>
+          <IonIcon icon={bug} />
+        </IonFabButton>
+      </IonFab>
     </footer>
   );
 };

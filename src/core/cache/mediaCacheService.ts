@@ -65,10 +65,12 @@ function getExtensionFromUrl(url: string, type: 'image' | 'audio'): string {
     const ext = pathname.substring(lastDot);
     
     // Validar que la extensión esté soportada
-    if (type === 'image' && CACHE_CONFIG.supportedImageExts.includes(ext)) {
+    if (type === 'image' && CACHE_CONFIG.supportedImageExts.includes(ext as any)) {
+      // extensión válida para imagen
       return ext;
     }
-    if (type === 'audio' && CACHE_CONFIG.supportedAudioExts.includes(ext)) {
+    if (type === 'audio' && CACHE_CONFIG.supportedAudioExts.includes(ext as any)) {
+      // extensión válida para audio
       return ext;
     }
     
