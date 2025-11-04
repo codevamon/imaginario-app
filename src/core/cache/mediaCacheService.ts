@@ -105,15 +105,13 @@ async function ensureDir(path: string): Promise<void> {
 }
 
 /**
- * Convierte un Blob a base64
+ * Convierte un Blob a base64 de forma segura
  */
 function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Remover el prefijo data:...;base64,
-      const base64 = result.split(',')[1];
+    reader.onloadend = () => {
+      const base64 = (reader.result as string).split(',')[1];
       resolve(base64);
     };
     reader.onerror = reject;
@@ -130,16 +128,19 @@ async function downloadTo(path: string, url: string): Promise<void> {
     
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(`Error descargando archivo: ${url}`);
     }
     
+    // 🔹 Convertir a base64 de forma segura
     const blob = await response.blob();
-    const base64 = await blobToBase64(blob);
+    const base64Data = await blobToBase64(blob);
     
+    // 🔹 Escribir archivo en caché
     await Filesystem.writeFile({
       path,
-      data: base64,
+      data: base64Data,
       directory: Directory.Data,
+      recursive: true,
     });
     
     log('Archivo descargado y guardado:', path);

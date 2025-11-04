@@ -18,6 +18,7 @@
     "cap:ios": "cap open ios"
   },
   "dependencies": {
+    "@capacitor-community/native-audio": "^7.0.1",
     "@capacitor-community/sqlite": "7.0.1",
     "@capacitor/android": "7.4.3",
     "@capacitor/app": "7.0.2",

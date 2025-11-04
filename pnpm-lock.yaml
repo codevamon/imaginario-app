@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@capacitor-community/native-audio':
+        specifier: ^7.0.1
+        version: 7.0.1(@capacitor/core@7.4.3)
       '@capacitor-community/sqlite':
         specifier: 7.0.1
         version: 7.0.1(@capacitor/core@7.4.3)
@@ -666,6 +669,11 @@ packages:
   '@babel/types@7.28.2':
     resolution: {integrity: sha512-ruv7Ae4J5dUYULmeXw1gmb7rYRz57OWCPM57pHojnLq/3Z1CK2lNSLTCVjxVk1F/TZHwOZZrOWi0ur95BbLxNQ==}
     engines: {node: '>=6.9.0'}
+
+  '@capacitor-community/native-audio@7.0.1':
+    resolution: {integrity: sha512-tqDvSB4oxn8kuPtFdvCM47ql6pO8vgfDcpfklpXL87gzgbHNPz6LN6aA0gTpFnTlR5LxIx5A4PIqpuoeHaF0+g==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor-community/sqlite@7.0.1':
     resolution: {integrity: sha512-Ypl8rTzgugBiPlqkeHM3mtt30py3AM5Ax4zZML+5XZjrNYUXHuiKUFgvSNW4a8glzP3/bjpYGiYkMHfclV1pTQ==}
@@ -4360,6 +4368,10 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.27.1
+
+  '@capacitor-community/native-audio@7.0.1(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
 
   '@capacitor-community/sqlite@7.0.1(@capacitor/core@7.4.3)':
     dependencies:

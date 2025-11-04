@@ -2,14 +2,31 @@ import React, { useState } from 'react';
 import { IonPage, IonContent, IonButton, IonText, IonImg } from '@ionic/react';
 import { mediaCacheService } from '../core/cache/mediaCacheService';
 
-const testImage = 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/birds-i.jpg';
-const testAudio = 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/audio/sample.mp3';
+const imageUrls = [
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/colibri.jpg',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/crotophaga-ani.jpg',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/turdus-leucomelas-albiventer.jpg',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/tyto-alba.jpg'
+];
+
+const audioUrls = [
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/colibri/Whatuko Msinduzhi - Rongoy - Ambrosio Chimosquero y Eduardo Gil.mp3',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/turdus-leucomelas-albiventer/Whatuko Dusherra - Rongon.mp3',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/crotophaga-ani/Whatuko Abi - Tezhumake - Hilario Bolanos.mp3',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-interviews/colibri/Historia Msinduzhi - Ambrosio Chimosquero.mp3',
+  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-interviews/turdus-leucomelas-albiventer/Historia Dusherra - Ambrosio.mp3'
+];
+
+const testImage = imageUrls[0];
+const testAudio = audioUrls[0];
 
 const TestCachePage: React.FC = () => {
   const [img, setImg] = useState<string | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const [cacheSize, setCacheSize] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cachedCount, setCachedCount] = useState(0);
+  const [cacheInfo, setCacheInfo] = useState<string>('');
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -20,7 +37,7 @@ const TestCachePage: React.FC = () => {
     try {
       setLoading(true);
       addLog('Iniciando descarga de imagen...');
-      const uri = await mediaCacheService.cacheImage(testImage);
+      const uri = await mediaCacheService.cacheImage(encodeURI(testImage));
       if (uri) {
         setImg(uri);
         addLog(`✅ Imagen cacheada: ${uri}`);
@@ -39,18 +56,20 @@ const TestCachePage: React.FC = () => {
     try {
       setLoading(true);
       addLog('Iniciando descarga de audio...');
-      const uri = await mediaCacheService.cacheAudio(testAudio);
+      const uri = await mediaCacheService.cacheAudio(encodeURI(testAudio));
       if (uri) {
         addLog(`✅ Audio cacheado: ${uri}`);
-        // Intentar reproducir el audio
-        try {
-          const audio = new Audio(uri);
-          await audio.play();
-          addLog('🔊 Audio reproducido exitosamente');
-        } catch (playError) {
-          addLog(`⚠️ Audio cacheado pero no se pudo reproducir: ${playError}`);
-          console.warn('[TestCachePage] Error reproduciendo audio:', playError);
-        }
+        // Verificar que se guardó (sin reproducir)
+        addLog('✅ Audio guardado en caché correctamente');
+        // Comentado: ya no reproducimos audio
+        // try {
+        //   const audio = new Audio(uri);
+        //   await audio.play();
+        //   addLog('🔊 Audio reproducido exitosamente');
+        // } catch (playError) {
+        //   addLog(`⚠️ Audio cacheado pero no se pudo reproducir: ${playError}`);
+        //   console.warn('[TestCachePage] Error reproduciendo audio:', playError);
+        // }
       } else {
         addLog('⚠️ No se pudo obtener URI del audio');
       }
@@ -85,10 +104,45 @@ const TestCachePage: React.FC = () => {
       await mediaCacheService.clearCache();
       setImg(undefined);
       setCacheSize(null);
+      setCachedCount(0);
+      setCacheInfo('');
       addLog('✅ Caché limpiado exitosamente');
     } catch (error) {
       addLog(`❌ Error limpiando caché: ${error}`);
       console.error('[TestCachePage] Error limpiando caché:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateCacheStats = async () => {
+    const totalSize = await mediaCacheService.getCacheSize();
+    const mb = (totalSize / 1024 / 1024).toFixed(2);
+    setCacheInfo(`Tamaño total: ${mb} MB`);
+  };
+
+  const downloadAllMedia = async () => {
+    try {
+      setLoading(true);
+      addLog('🚀 Iniciando descarga masiva de imágenes y audios...');
+      let total = 0;
+      
+      for (const url of imageUrls) {
+        const res = await mediaCacheService.cacheImage(encodeURI(url));
+        if (res) total++;
+      }
+      
+      for (const url of audioUrls) {
+        const res = await mediaCacheService.cacheAudio(encodeURI(url));
+        if (res) total++;
+      }
+      
+      setCachedCount(total);
+      addLog(`✅ Descargados y cacheados ${total} archivos.`);
+      await updateCacheStats();
+    } catch (error) {
+      addLog(`❌ Error en descarga masiva: ${error}`);
+      console.error('[TestCachePage] Error en descarga masiva:', error);
     } finally {
       setLoading(false);
     }
@@ -104,6 +158,15 @@ const TestCachePage: React.FC = () => {
 
           {/* Botones de acción */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <IonButton
+              expand="block"
+              color="success"
+              onClick={downloadAllMedia}
+              disabled={loading}
+            >
+              DESCARGAR TODO
+            </IonButton>
+
             <IonButton
               expand="block"
               onClick={handleDownloadImage}
@@ -140,13 +203,17 @@ const TestCachePage: React.FC = () => {
           </div>
 
           {/* Información del tamaño del caché */}
-          {cacheSize !== null && (
-            <div style={{ padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '8px' }}>
-              <IonText>
-                <strong>Tamaño actual del caché: {cacheSize.toFixed(2)} MB</strong>
-              </IonText>
-            </div>
-          )}
+          <div style={{ padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '8px' }}>
+            <IonText>
+              {cacheInfo && <div><strong>{cacheInfo}</strong></div>}
+              {cacheSize !== null && (
+                <div><strong>Tamaño actual del caché: {cacheSize.toFixed(2)} MB</strong></div>
+              )}
+              <div style={{ marginTop: '8px' }}>
+                <strong>Archivos cacheados: {cachedCount}</strong>
+              </div>
+            </IonText>
+          </div>
 
           {/* Imagen cacheada */}
           {img && (

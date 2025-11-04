@@ -3,6 +3,7 @@ import {
   IonButton, IonSpinner, IonToast
 } from '@ionic/react';
 import { useState } from 'react';
+import { Network } from '@capacitor/network';
 import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
 
 export default function SyncCenter() {
@@ -13,6 +14,14 @@ export default function SyncCenter() {
 
   async function handleSync() {
     if (isSyncing) return;
+    
+    const status = await Network.getStatus();
+    if (!status.connected) {
+      console.warn('[Sync] 🚫 Sin conexión: refresco cancelado.');
+      setSyncMessage('🚫 Sin conexión a Internet');
+      setShowToast(true);
+      return;
+    }
     
     setIsSyncing(true);
     setSyncMessage('Sincronizando datos...');
@@ -36,6 +45,14 @@ export default function SyncCenter() {
 
   async function handleResync() {
     if (isResyncing) return;
+    
+    const status = await Network.getStatus();
+    if (!status.connected) {
+      console.warn('[Sync] 🚫 Sin conexión: refresco cancelado.');
+      setSyncMessage('🚫 Sin conexión a Internet');
+      setShowToast(true);
+      return;
+    }
     
     setIsResyncing(true);
     setSyncMessage('🔄 Resync completo en progreso...');
