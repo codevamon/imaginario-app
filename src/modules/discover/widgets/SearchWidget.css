@@ -1,6 +1,10 @@
 /* === Search Widget === */
 .search-widget-i {
+<<<<<<< HEAD
   padding: 25vw 5vw 2.5vw;
+=======
+  padding: 15vw 5vw 2.5vw;
+>>>>>>> fix-media-cache
 }
 
 .search-widget-title {

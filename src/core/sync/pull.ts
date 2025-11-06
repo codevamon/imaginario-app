@@ -4,6 +4,7 @@ import { upsertMany } from '../db/dao';
 import { getMetaValue, setMetaValue, getDb } from '../sqlite';
 import { logActivity, initActivityLog } from '../db/dao/activity_log';
 import type { Bird } from '../db/dao/birds';
+import { Network } from '@capacitor/network';
 
 type SyncResult = {
   table: string;
@@ -33,6 +34,28 @@ const SYNC_CONFIG = {
  * Función principal de pull que sincroniza todas las tablas
  */
 export async function pullAllTables(): Promise<PullResult> {
+  try {
+    const status = await Network.getStatus();
+    if (!status.connected) {
+      console.warn('[pullAllTables] 🚫 Sin conexión: se omite sincronización.');
+      return {
+        success: false,
+        totalRecords: 0,
+        results: [],
+        errors: ['Sin conexión a Internet']
+      };
+    }
+    console.log('[pullAllTables] 🌐 Conexión activa, iniciando sync...');
+  } catch (err) {
+    console.error('[pullAllTables] ❌ Error verificando conexión:', err);
+    return {
+      success: false,
+      totalRecords: 0,
+      results: [],
+      errors: [`Error verificando conexión: ${err}`]
+    };
+  }
+
   console.log('[sync] 🚀 Iniciando sincronización completa...');
   
   // Log de inicio de sincronización

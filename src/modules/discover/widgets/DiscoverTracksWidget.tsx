@@ -1,11 +1,12 @@
 // src/modules/discover/DiscoverTracksWidget.tsx
 import React, { useEffect, useState } from 'react';
-import { IonList, IonItem, IonLabel, IonText, IonIcon } from '@ionic/react';
+import { IonList, IonItem, IonLabel, IonText, IonIcon, IonSpinner } from '@ionic/react';
 import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { listTracks, type Track } from '../../../core/db/dao/tracks';
 import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
+import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 
 type Props = {
   searchTerm?: string;
@@ -21,6 +22,7 @@ const TrackCard: React.FC<{
   onToggle: (id: string, url: string) => void;
 }> = ({ track, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
+  const isLoading = useAudioLoading(track.id);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -35,11 +37,18 @@ const TrackCard: React.FC<{
       onClick={() => onToggle(track.id, track.audio_url!)}
       style={{ '--padding-start': '16px' }}
     >
-      <IonIcon 
-        icon={isPlaying ? pause : play} 
-        slot="start"
-        style={{ fontSize: '24px', color: isPlaying ? '#3880ff' : '#666' }}
-      />
+      {isLoading ? (
+        <IonSpinner 
+          slot="start"
+          style={{ width: '24px', height: '24px' }}
+        />
+      ) : (
+        <IonIcon 
+          icon={isPlaying ? pause : play} 
+          slot="start"
+          style={{ fontSize: '24px', color: isPlaying ? '#3880ff' : '#666' }}
+        />
+      )}
       
       <IonLabel>
         <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>

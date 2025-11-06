@@ -1,6 +1,8 @@
 import React from 'react';
 import { useIonRouter } from '@ionic/react';
 import { useLocation } from 'react-router-dom';
+import { IonFab, IonFabButton, IonIcon } from '@ionic/react';
+import { bug } from 'ionicons/icons';
 import './Footbar.css';
 
 const Footbar: React.FC = () => {
@@ -80,7 +82,15 @@ const Footbar: React.FC = () => {
           </span>
           <span className="l2-i">Acerca</span>
         </div>
+      
+        
       </div>
+
+      <IonFab vertical="bottom" horizontal="end" slot="fixed" style={{ bottom: '90px', right: '16px' }}>
+        <IonFabButton size="small" color="medium" onClick={() => router.push('/test-cache')}>
+          <IonIcon icon={bug} />
+        </IonFabButton>
+      </IonFab>
     </footer>
   );
 };

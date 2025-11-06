@@ -136,31 +136,77 @@ const AboutPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="about-section-1">
-                <div className="lang-toggle-i">
-                  <button
-                    className={`btn-i l1-i ${(language as Lang) === 'es' ? '_active' : ''}`}
-                    onClick={() => setLanguage('es')}
-                  >
-                    Español
-                  </button>
-                  <button
-                    className={`btn-i l1-i ${(language as Lang) === 'da' ? '_active' : ''}`}
-                    onClick={() => setLanguage('da')}
-                  >
-                    Damuna
-                  </button>
-                </div>
-                <div className="about-title">
-                  <p className="p2-ii _lgt _capitalize">Shama yuu anaruka</p>
-                  <h1 className="h1-i _rgl ">Gängunaka Wimarua - Waninaka Anarukua</h1>
-                </div>  
-                <div className="about-text">
-                  <p className="p1-i _lgt">
-                    Wamunka Imaginario Fundação yuga Wiwa Yugumaïun Bunkuannarrúa Tayrona, Wimarua Writer Collective, shama yuu anaruka jizhana anokuna.
-                  </p>
-                </div>
+              <div className="about-sections">
+                <div className="about-section-1">
+                  <div className="lang-toggle-i">
+                    <button
+                      className={`btn-i l1-i ${(language as Lang) === 'es' ? '_active' : ''}`}
+                      onClick={() => setLanguage('es')}
+                    >
+                      Español
+                    </button>
+                    <button
+                      className={`btn-i l1-i ${(language as Lang) === 'da' ? '_active' : ''}`}
+                      onClick={() => setLanguage('da')}
+                    >
+                      Damuna
+                    </button>
+                  </div>
+                  <div className="about-title">
+                    <p className="p2-ii _lgt _capitalize">Shama yuu anaruka</p>
+                    <h1 className="h1-i _rgl ">Gängunaka Wimarua - Waninaka Anarukua</h1>
+                  </div>
                   
+                  <div className="about-text">
+                    <p className="p1-i _lgt">
+                      Wamunka Imaginario Fundação yuga Wiwa Yugumaïun Bunkuannarrúa Tayrona, Wimarua Writer Collective, shama yuu anaruka jizhana anokuna.
+                    </p>
+                  </div>
+                </div>
+                <div className="about-section-2">
+                  <div className="about-image">
+                    <img
+                      src={
+                        isOnline
+                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-1.png'
+                          : headBird1
+                      }
+                      alt="About"
+                    />
+                  </div>
+                  <div className="about-text">
+                    <p className="p1-i _lgt">Gängunaka Wimarua - Waninaka Anarukua shama yuu anaruka jizhana anokuna, Wamunka Imaginario Fundação yuga Wiwa Yugumaiun Bunkuanarrúa Tayrona, Wimarua Writer Collective.</p>
+                    <p className="p1-i _lgt">Anaruka jizhana anokuna yuga wiwa kakai jizhana anokuna münnaka ammunka zhanmanka, jizhana monitores comunitarios, documentación participativa yuga materiales pedagógicos jizhana anokuna, ancestral yuga científico anaruka jizhana anokuna waninaka anarukua jizhana anokuna planeta jizhana anokuna münnaka ammunka zhanmanka jizhana anokuna ecosistemas jizhana anokuna.</p>
+                  </div>
+                </div>
+                <div className="about-section-3">
+                  <div className="about-text-1">
+                    <h3 className="h1-i _mdm">Ancestral yuga científico anaruka jizhana anokuna waninaka anarukua</h3>
+                  </div>
+                  <div className="about-image-1">
+                    <img
+                      src={
+                        isOnline
+                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/pic-about-1.png'
+                          : picAbout1
+                      }
+                      alt="About"
+                    />
+                  </div>
+                  <div className="about-text-2">
+                    <p className="p1-i _lgt">Shama aplicación shama yuu anaruka jizhana anokuna proceso: shama yuu anaruka jizhana anokuna nuevas generaciones waninaka anarukua jizhana anokuna, música, lengua yuga conocimiento biocultural jizhana anokuna mayores waninaka futuro.</p>
+                  </div>
+                  <div className="about-image-2">
+                    <img
+                      src={
+                        isOnline
+                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-2.png'
+                          : headBird2
+                      }
+                      alt="About"
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>

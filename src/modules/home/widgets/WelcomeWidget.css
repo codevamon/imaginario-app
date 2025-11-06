@@ -1,6 +1,10 @@
 /* === Welcome Widget === */
 .widget-welcome-i {
+<<<<<<< HEAD
   padding: 25vw 5vw 5vw;
+=======
+  padding: 15vw 5vw 5vw;
+>>>>>>> fix-media-cache
 }
 .widget-welcome-i .in-widget .h1-i {
   margin-bottom: 1vw;

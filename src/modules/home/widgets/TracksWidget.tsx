@@ -61,7 +61,7 @@ const TrackCard: React.FC<TrackCardProps> = ({ track, isPlaying, onToggle }) => 
             <div className="track-card-subtitle h4-i _lgt primary-i">{track.interpreters}</div>
           )}
           <div className="l2-i _rgl primary-i">
-            {[track.community, track.instruments, track.author]
+            {[track.instruments, track.author]
               .filter(Boolean)
               .join(' | ')}
           </div>

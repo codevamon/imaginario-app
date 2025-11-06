@@ -5,6 +5,7 @@ import {
   IonToast, IonChip, IonText, IonRefresher, IonRefresherContent
 } from '@ionic/react';
 import { Preferences } from '@capacitor/preferences';
+import { Network } from '@capacitor/network';
 import { filter, refresh } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
@@ -63,6 +64,15 @@ export default function HomePage() {
 
   async function handleSync() {
     if (isSyncing) return;
+    
+    const status = await Network.getStatus();
+    if (!status.connected) {
+      console.warn('[Sync] 🚫 Sin conexión: refresco cancelado.');
+      setSyncMessage('🚫 Sin conexión a Internet');
+      setShowToast(true);
+      return;
+    }
+    
     setIsSyncing(true);
     setSyncMessage('Sincronizando datos...');
     setShowToast(true);
@@ -84,6 +94,15 @@ export default function HomePage() {
 
   async function handleResync() {
     if (isResyncing) return;
+    
+    const status = await Network.getStatus();
+    if (!status.connected) {
+      console.warn('[Sync] 🚫 Sin conexión: refresco cancelado.');
+      setSyncMessage('🚫 Sin conexión a Internet');
+      setShowToast(true);
+      return;
+    }
+    
     setIsResyncing(true);
     setSyncMessage('🔄 Resync completo en progreso...');
     setShowToast(true);
@@ -97,6 +116,20 @@ export default function HomePage() {
     } finally {
       setIsResyncing(false);
     }
+  }
+
+  async function handleRefresh(event: CustomEvent) {
+    const status = await Network.getStatus();
+    if (!status.connected) {
+      console.warn('[Sync] 🚫 Sin conexión: refresco cancelado.');
+      setTimeout(() => event.detail.complete(), 500);
+      return;
+    }
+
+    // si hay conexión, ejecutar la sync normal
+    await pullAllTables();
+    await loadData();
+    event.detail.complete();
   }
 
   // --- nueva util: adjunta la primera imagen encontrada en bird_images (si existe DAO)
@@ -215,7 +248,7 @@ export default function HomePage() {
       <IonContent fullscreen>
         <WelcomeWidget />
 
-        <IonRefresher slot="fixed" onIonRefresh={async (e) => { await handleResync(); e.detail.complete(); }}>
+        <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon="arrow-down-circle-outline"
             refreshingSpinner="crescent"
