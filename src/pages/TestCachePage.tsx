@@ -1,24 +1,30 @@
 import React, { useState } from 'react';
 import { IonPage, IonContent, IonButton, IonText, IonImg } from '@ionic/react';
-import { mediaCacheService } from '../core/cache/mediaCacheService';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { mediaCacheService, ensureCachedMedia } from '../core/cache/mediaCacheService';
+import { getAllTracks } from '../core/db/dao/tracks';
+import { getAllSings } from '../core/db/dao/sings';
+import { getAllInterviews } from '../core/db/dao/interviews';
+import { getDb } from '../core/sqlite';
 
-const imageUrls = [
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/colibri.jpg',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/crotophaga-ani.jpg',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/turdus-leucomelas-albiventer.jpg',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/tyto-alba.jpg'
-];
+// Arrays hardcodeados comentados - ahora se obtienen desde SQLite
+// const imageUrls = [
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/colibri.jpg',
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/crotophaga-ani.jpg',
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/turdus-leucomelas-albiventer.jpg',
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/tyto-alba.jpg'
+// ];
 
-const audioUrls = [
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/colibri/Whatuko Msinduzhi - Rongoy - Ambrosio Chimosquero y Eduardo Gil.mp3',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/turdus-leucomelas-albiventer/Whatuko Dusherra - Rongon.mp3',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/crotophaga-ani/Whatuko Abi - Tezhumake - Hilario Bolanos.mp3',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-interviews/colibri/Historia Msinduzhi - Ambrosio Chimosquero.mp3',
-  'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-interviews/turdus-leucomelas-albiventer/Historia Dusherra - Ambrosio.mp3'
-];
+// const audioUrls = [
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/colibri/Whatuko Msinduzhi - Rongoy - Ambrosio Chimosquero y Eduardo Gil.mp3',
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/turdus-leucomelas-albiventer/Whatuko Dusherra - Rongon.mp3',
+//   'https://fkqqpndpginvqajvb.supabase.co/storage/v1/object/public/bird-tracks/crotophaga-ani/Whatuko Abi - Tezhumake - Hilario Bolanos.mp3',
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-interviews/colibri/Historia Msinduzhi - Ambrosio Chimosquero.mp3',
+//   'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-interviews/turdus-leucomelas-albiventer/Historia Dusherra - Ambrosio.mp3'
+// ];
 
-const testImage = imageUrls[0];
-const testAudio = audioUrls[0];
+const testImage = 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-images/colibri.jpg';
+const testAudio = 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/bird-tracks/colibri/Whatuko Msinduzhi - Rongoy - Ambrosio Chimosquero y Eduardo Gil.mp3';
 
 const TestCachePage: React.FC = () => {
   const [img, setImg] = useState<string | undefined>(undefined);
@@ -116,35 +122,149 @@ const TestCachePage: React.FC = () => {
   };
 
   const updateCacheStats = async () => {
-    const totalSize = await mediaCacheService.getCacheSize();
-    const mb = (totalSize / 1024 / 1024).toFixed(2);
-    setCacheInfo(`Tamaño total: ${mb} MB`);
+    try {
+      let totalSize = 0;
+      let totalFiles = 0;
+
+      const dirs = ['imaginario/images', 'imaginario/audio'];
+
+      for (const dir of dirs) {
+        try {
+          const { files } = await Filesystem.readdir({
+            path: dir,
+            directory: Directory.Data,
+          });
+          for (const file of files) {
+            try {
+              const stat = await Filesystem.stat({
+                path: `${dir}/${file.name}`,
+                directory: Directory.Data,
+              });
+              totalSize += stat.size || 0;
+              totalFiles++;
+            } catch {
+              // ignorar archivos inaccesibles
+            }
+          }
+        } catch {
+          // ignorar directorios inexistentes
+        }
+      }
+
+      const totalMB = totalSize / (1024 * 1024);
+      setCacheSize(totalMB);
+      setCachedCount(totalFiles);
+      setCacheInfo(`Tamaño total: ${totalMB.toFixed(2)} MB`);
+
+      addLog(`📦 Caché: ${totalFiles} archivos, ${totalMB.toFixed(2)} MB`);
+    } catch (err) {
+      console.error('[CacheStats] Error al calcular tamaño:', err);
+      addLog(`❌ Error al calcular tamaño de caché: ${err}`);
+    }
   };
 
   const downloadAllMedia = async () => {
     try {
       setLoading(true);
-      addLog('🚀 Iniciando descarga masiva de imágenes y audios...');
+      addLog('🚀 Iniciando descarga masiva de imágenes y audios desde SQLite...');
+
+      // Helper para obtener todas las imágenes
+      const getAllBirdImages = async () => {
+        try {
+          const db = await getDb();
+          const result = await db.query(`
+            SELECT * FROM bird_images 
+            WHERE deleted_at IS NULL 
+            ORDER BY updated_at DESC
+          `);
+          return (result.values || []).map((row: any) => ({
+            id: row.id,
+            bird_id: row.bird_id,
+            url: row.url,
+            description: row.description,
+            updated_at: row.updated_at,
+            deleted_at: row.deleted_at
+          }));
+        } catch (error) {
+          console.error('[TestCachePage] Error obteniendo imágenes:', error);
+          return [];
+        }
+      };
+
+      const [tracks, sings, interviews, images] = await Promise.all([
+        getAllTracks(),
+        getAllSings(),
+        getAllInterviews(),
+        getAllBirdImages(),
+      ]);
+
+      const allUrls: { url: string; type: 'audio' | 'image' }[] = [];
+
+      tracks.forEach(t => t.audio_url && allUrls.push({ url: t.audio_url, type: 'audio' }));
+      sings.forEach(s => s.audio_url && allUrls.push({ url: s.audio_url, type: 'audio' }));
+      interviews.forEach(i => i.audio_url && allUrls.push({ url: i.audio_url, type: 'audio' }));
+      images.forEach(img => img.url && allUrls.push({ url: img.url, type: 'image' }));
+
       let total = 0;
-      
-      for (const url of imageUrls) {
-        const res = await mediaCacheService.cacheImage(encodeURI(url));
-        if (res) total++;
+      for (const item of allUrls) {
+        const result = await ensureCachedMedia(encodeURI(item.url), item.type);
+        if (result) total++;
       }
-      
-      for (const url of audioUrls) {
-        const res = await mediaCacheService.cacheAudio(encodeURI(url));
-        if (res) total++;
-      }
-      
-      setCachedCount(total);
-      addLog(`✅ Descargados y cacheados ${total} archivos.`);
+
       await updateCacheStats();
-    } catch (error) {
-      addLog(`❌ Error en descarga masiva: ${error}`);
-      console.error('[TestCachePage] Error en descarga masiva:', error);
+      setCachedCount(total);
+      addLog(`✅ Descargados y cacheados ${total} archivos desde SQLite.`);
+      await debugListCache();
+    } catch (err) {
+      addLog(`❌ Error durante descarga masiva: ${err}`);
+      console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const debugListCache = async () => {
+    try {
+      const audio = await Filesystem.readdir({ directory: Directory.Data, path: 'imaginario/audio' }).catch(() => ({ files: [] as any[] }));
+      const images = await Filesystem.readdir({ directory: Directory.Data, path: 'imaginario/images' }).catch(() => ({ files: [] as any[] }));
+      addLog(`[debug] 📂 audio: ${(audio.files || []).length} | images: ${(images.files || []).length}`);
+      for (const f of audio.files || []) addLog(`[debug] audio → ${f.name}`);
+      for (const f of images.files || []) addLog(`[debug] image → ${f.name}`);
+    } catch (e) {
+      addLog(`[debug] error readdir: ${String(e)}`);
+    }
+  };
+
+  const listCachedFiles = async () => {
+    try {
+      addLog('🗂️ Listando archivos cacheados...');
+      const dirs = ['imaginario/images', 'imaginario/audio'];
+      for (const dir of dirs) {
+        try {
+          const { files } = await Filesystem.readdir({
+            path: dir,
+            directory: Directory.Data,
+          });
+          addLog(`📁 Carpeta: ${dir} (${files.length} archivos)`);
+          for (const file of files) {
+            try {
+              const stat = await Filesystem.stat({
+                path: `${dir}/${file.name}`,
+                directory: Directory.Data,
+              });
+              const sizeMB = (stat.size || 0) / (1024 * 1024);
+              addLog(`   - ${file.name} (${sizeMB.toFixed(2)} MB)`);
+            } catch {
+              addLog(`   - ${file.name} (sin acceso a tamaño)`);
+            }
+          }
+        } catch {
+          addLog(`⚠️ No se encontró el directorio: ${dir}`);
+        }
+      }
+      addLog('✅ Listado completo.');
+    } catch (err) {
+      addLog(`❌ Error al listar archivos: ${err}`);
     }
   };
 
@@ -190,6 +310,15 @@ const TestCachePage: React.FC = () => {
               color="secondary"
             >
               Ver tamaño de caché
+            </IonButton>
+
+            <IonButton
+              expand="block"
+              color="medium"
+              onClick={listCachedFiles}
+              disabled={loading}
+            >
+              📂 Ver archivos en caché
             </IonButton>
 
             <IonButton

@@ -2,7 +2,8 @@
 // Robust AudioManager singleton: controla 1 <audio> global, normaliza URLs y maneja errores.
 import { NativeAudio } from '@capacitor-community/native-audio';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { mediaCacheService } from '../cache/mediaCacheService';
+import { Network } from '@capacitor/network';
+import { mediaCacheService, ensureCachedMedia } from '../cache/mediaCacheService';
 
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
@@ -37,6 +38,80 @@ async function getFileSize(path: string): Promise<number> {
     return stat.size || 0;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Genera un hash SHA-256 de la URL
+ */
+async function sha256(url: string): Promise<string> {
+  try {
+    // Normalizar URL: eliminar query params y fragmentos para mantener hashes consistentes
+    if (url.includes('?') || url.includes('#')) {
+      try {
+        const u = new URL(url);
+        u.search = '';
+        u.hash = '';
+        url = u.toString();
+      } catch {
+        // Si no es una URL válida, eliminar manualmente partes comunes
+        url = url.split('?')[0].split('#')[0];
+      }
+    }
+
+    const encoder = new TextEncoder();
+    const data = encoder.encode(url);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+  } catch (error) {
+    console.error('[AudioManager] Error generando hash SHA-256:', error);
+    // Fallback: usar un hash simple basado en la URL
+    return btoa(url).replace(/[^a-zA-Z0-9]/g, '').substring(0, 64);
+  }
+}
+
+/**
+ * Prepara la fuente de audio: prioriza medios cacheados, descarga en background si hay conexión
+ */
+async function prepareSource(originalSrc: string, id: string): Promise<string> {
+  try {
+    const { connected } = await Network.getStatus();
+
+    // Derivar hash único por URL
+    const hash = await sha256(originalSrc);
+    const relPath = `imaginario/audio/${hash}.mp3`;
+
+    // Si estamos offline, intenta resolver local
+    if (!connected) {
+      try {
+        const stat = await Filesystem.stat({ path: relPath, directory: Directory.Data });
+        if (stat) {
+          const uri = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
+          const fileUri = uri.uri.startsWith('file://') ? uri.uri : `file://${uri.uri}`;
+          console.log('[AudioManager] 🎧 Reproduciendo desde caché local:', fileUri);
+          return fileUri;
+        }
+      } catch {
+        console.warn('[AudioManager] ⚠️ Archivo no disponible sin conexión:', originalSrc);
+        if (typeof window !== 'undefined') {
+          const toast = document.createElement('ion-toast');
+          toast.message = '⚠️ Archivo no disponible sin conexión';
+          toast.duration = 2000;
+          document.body.appendChild(toast);
+          toast.present();
+        }
+        return originalSrc;
+      }
+    }
+
+    // Si hay red: asegurar copia local, devolver original
+    await ensureCachedMedia(originalSrc, 'audio');
+    return originalSrc;
+  } catch (error) {
+    console.warn('[AudioManager] Error en prepareSource:', error);
+    return originalSrc;
   }
 }
 
@@ -226,47 +301,22 @@ class AudioManager {
     // Indicar que este track está cargando
     this.setLoading(id);
 
-    // Verificar si el archivo ya está en caché
-    try {
-      const cached = await mediaCacheService.cacheAudio(src);
-      if (cached && cached.startsWith('file://')) {
-        console.log('[AudioManager] 🎧 Reproduciendo desde caché local:', cached);
-        src = cached; // sobrescribe la URL con la versión local
-        
-        // Obtener URI segura compatible con WebView
-        try {
-          // Extraer el path relativo del URI file://
-          let relativePath = src.replace('file://', '').replace(/^\/data\/user\/0\/[^\/]+\/files\//, '');
-          
-          // Si el path contiene 'imaginario/', usarlo directamente
-          if (relativePath.includes('imaginario/')) {
-            const imaginarioIndex = relativePath.indexOf('imaginario/');
-            relativePath = relativePath.substring(imaginarioIndex);
-          } else {
-            // Si no tiene 'imaginario/', intentar extraer desde el nombre del archivo
-            const fileName = src.split('/').pop() || '';
-            relativePath = `imaginario/audio/${fileName}`;
-          }
-          
-          const safeUri = await Filesystem.getUri({
-            directory: Directory.Data,
-            path: relativePath,
-          });
-          
-          if (safeUri?.uri) {
-            src = safeUri.uri;
-            console.log('[AudioManager] ✅ Usando URI segura para reproducción:', src);
-          }
-        } catch (e) {
-          console.warn('[AudioManager] ⚠️ No se pudo obtener URI segura:', e);
-        }
-      } else {
-        console.log('[AudioManager] 🌐 Usando fuente remota:', src);
-      }
-    } catch (err) {
-      console.warn('[AudioManager] ⚠️ No se pudo acceder al caché:', err);
-      // Si falla el caché, dejar de mostrar loading
+    // Preparar fuente: prioriza caché local, descarga en background si hay conexión
+    const originalSrc = src;
+    src = await prepareSource(originalSrc, id);
+    
+    // Si prepareSource retornó la URL original pero no hay conexión y no hay archivo local,
+    // ya se mostró el toast, así que retornamos
+    if (!src || (src === originalSrc && !src.startsWith('file://') && !src.startsWith('http'))) {
       this.setLoading(null);
+      return;
+    }
+
+    // Si la fuente preparada es local, ya está lista para usar
+    if (src.startsWith('file://')) {
+      console.log('[AudioManager] 🎧 Reproduciendo desde caché local:', src);
+    } else {
+      console.log('[AudioManager] 🌐 Usando fuente remota:', src);
     }
 
     // 🩵 Interceptar audios locales y convertirlos a blob seguros si es necesario

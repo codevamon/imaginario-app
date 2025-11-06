@@ -316,10 +316,6 @@ const BirdDetail: React.FC = () => {
             <BirdTracksWidget items={tracks} />
           </AccordionI>
 
-          {/* Intérpretes */}
-          <AccordionI title="Intérpretes">
-            <BirdMusiciansWidget items={musicians} />
-          </AccordionI>
 
           {/* Entrevistas */}
           <AccordionI title="Entrevistas">

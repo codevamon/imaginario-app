@@ -49,6 +49,24 @@ async function hashUrl(url: string): Promise<string> {
 }
 
 /**
+ * Genera un hash SHA-256 de la URL para usarlo como nombre de archivo
+ */
+async function sha256(url: string): Promise<string> {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(url);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+  } catch (error) {
+    logError('Error generando hash SHA-256 de URL:', error);
+    // Fallback: usar un hash simple basado en la URL
+    return btoa(url).replace(/[^a-zA-Z0-9]/g, '').substring(0, 64);
+  }
+}
+
+/**
  * Obtiene la extensión del archivo desde la URL
  */
 function getExtensionFromUrl(url: string, type: 'image' | 'audio'): string {
@@ -119,34 +137,70 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Descarga un archivo desde una URL y lo guarda localmente
- */
-async function downloadTo(path: string, url: string): Promise<void> {
+// ✅ Descarga robusta: mkdir padre + write base64 + verificación de bytes
+async function downloadTo(path: string, url: string): Promise<boolean> {
   try {
-    log('Descargando:', url, '→', path);
-    
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Error descargando archivo: ${url}`);
+    log('[downloadTo] Iniciando descarga:', url, '→', path);
+
+    if (!url || !/^https?:\/\//i.test(url)) {
+      log('[downloadTo] 🚫 URL inválida o vacía:', url);
+      return false;
     }
-    
-    // 🔹 Convertir a base64 de forma segura
-    const blob = await response.blob();
-    const base64Data = await blobToBase64(blob);
-    
-    // 🔹 Escribir archivo en caché
+
+    const { Network } = await import('@capacitor/network');
+    const { connected } = await Network.getStatus();
+    if (!connected) {
+      log('[downloadTo] ⚠️ Sin conexión, se omite descarga de', url);
+      return false;
+    }
+
+    // Descarga HTTP
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`[downloadTo] HTTP ${resp.status} ${resp.statusText} → ${url}`);
+    const blob = await resp.blob();
+
+    // Blob → base64 (solo payload, sin "data:...;base64,")
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onloadend = () => {
+        const result = String(reader.result || '');
+        const payload = result.includes(',') ? result.split(',')[1] : result;
+        resolve(payload);
+      };
+      reader.readAsDataURL(blob);
+    });
+
+    // Asegurar carpeta padre
+    const parent = path.split('/').slice(0, -1).join('/');
+    if (parent) {
+      await Filesystem.mkdir({
+        path: parent,
+        directory: Directory.Data,
+        recursive: true,
+      }).catch(() => { /* ya existe */ });
+    }
+
+    // Escribir en Data con encoding base64
     await Filesystem.writeFile({
       path,
-      data: base64Data,
+      data: base64,
       directory: Directory.Data,
       recursive: true,
     });
-    
-    log('Archivo descargado y guardado:', path);
+
+    // Verificación de bytes > 0
+    const stat = await Filesystem.stat({ path, directory: Directory.Data });
+    if (!stat || (stat.size ?? 0) <= 0) {
+      log('[downloadTo] ❌ Archivo con tamaño 0:', path);
+      return false;
+    }
+
+    log('[downloadTo] ✅ Archivo guardado en caché:', path, 'bytes:', stat.size);
+    return true;
   } catch (error) {
-    logError('Error descargando archivo:', url, error);
-    throw error;
+    log('[downloadTo] ❌ Error al descargar/guardar', url, error);
+    return false;
   }
 }
 
@@ -154,64 +208,24 @@ async function downloadTo(path: string, url: string): Promise<void> {
  * Calcula el tamaño total del caché en bytes
  */
 async function getTotalCacheSize(): Promise<number> {
-  try {
-    let totalBytes = 0;
-    
-    // Verificar tamaño de imágenes
-    try {
-      const imagesDir = await Filesystem.readdir({
-        path: CACHE_CONFIG.imagesDir,
-        directory: Directory.Data,
-      });
-      
-      for (const file of imagesDir.files || []) {
-        try {
-          const stat = await Filesystem.stat({
-            path: `${CACHE_CONFIG.imagesDir}/${file.name}`,
-            directory: Directory.Data,
-          });
-          totalBytes += stat.size || 0;
-        } catch {
-          // Ignorar archivos que no se pueden leer
-        }
-      }
-    } catch (error: any) {
-      // Si el directorio no existe, no hay problema
-      if (!error.message?.includes('does not exist')) {
-        logWarn('Error leyendo directorio de imágenes:', error);
+  async function dirSize(path: string): Promise<number> {
+    const entries = await Filesystem.readdir({ directory: Directory.Data, path }).catch(() => ({ files: [] as any[] }));
+    let total = 0;
+    for (const e of entries.files || []) {
+      const subPath = `${path}/${e.name}`;
+      if (e.type === 'directory') {
+        total += await dirSize(subPath);
+      } else {
+        const st = await Filesystem.stat({ directory: Directory.Data, path: subPath }).catch(() => null);
+        if (st?.size) total += st.size;
       }
     }
-    
-    // Verificar tamaño de audios
-    try {
-      const audioDir = await Filesystem.readdir({
-        path: CACHE_CONFIG.audioDir,
-        directory: Directory.Data,
-      });
-      
-      for (const file of audioDir.files || []) {
-        try {
-          const stat = await Filesystem.stat({
-            path: `${CACHE_CONFIG.audioDir}/${file.name}`,
-            directory: Directory.Data,
-          });
-          totalBytes += stat.size || 0;
-        } catch {
-          // Ignorar archivos que no se pueden leer
-        }
-      }
-    } catch (error: any) {
-      // Si el directorio no existe, no hay problema
-      if (!error.message?.includes('does not exist')) {
-        logWarn('Error leyendo directorio de audios:', error);
-      }
-    }
-    
-    return totalBytes;
-  } catch (error) {
-    logError('Error calculando tamaño del caché:', error);
-    return 0;
+    return total;
   }
+  const root = 'imaginario';
+  const exists = await Filesystem.stat({ directory: Directory.Data, path: root }).catch(() => null);
+  if (!exists) return 0;
+  return await dirSize(root);
 }
 
 /**
@@ -434,6 +448,43 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
   } catch (error) {
     logError('Error cacheando audio:', url, error);
     // En caso de error, retornar la URL original como fallback
+    return url;
+  }
+}
+
+// ✅ Helper unificado para medios
+export async function ensureCachedMedia(url?: string | null, type: 'audio' | 'image' = 'audio'): Promise<string | undefined> {
+  if (!url) {
+    log(`[ensureCachedMedia] URL vacía (${type}), omitiendo.`);
+    return undefined;
+  }
+
+  try {
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+    if (!isNative) return url;
+
+    const hash = await sha256(url);
+    const ext = type === 'image' ? '.jpg' : '.mp3';
+    const relPath = `imaginario/${type === 'image' ? 'images' : 'audio'}/${hash}${ext}`;
+
+    // ¿Ya existe?
+    const existing = await Filesystem.stat({ path: relPath, directory: Directory.Data }).catch(() => null);
+    if (!existing) {
+      // Descargar si hay red
+      const ok = await downloadTo(relPath, url);
+      if (!ok) {
+        log(`[ensureCachedMedia] ⚠️ No se pudo cachear ${type}, dejo URL original.`);
+        return url;
+      }
+    }
+
+    // Resolver URI nativa segura
+    const uriRes = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
+    const fileUri = uriRes?.uri?.startsWith('file://') ? uriRes.uri : `file://${uriRes?.uri}`;
+    log(`[ensureCachedMedia] ▶️ URI local lista (${type}):`, fileUri);
+    return fileUri;
+  } catch (error) {
+    log(`[ensureCachedMedia] ❌ Error cacheando ${type}:`, error);
     return url;
   }
 }

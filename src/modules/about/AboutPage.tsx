@@ -76,7 +76,7 @@ const AboutPage: React.FC = () => {
                       className={`btn-i l1-i ${(language as Lang) === 'da' ? '_active' : ''}`}
                       onClick={() => setLanguage('da')}
                     >
-                      Damuna
+                      Dʉmʉna
                     </button>
                   </div>
                   <div className="about-title">
@@ -149,17 +149,22 @@ const AboutPage: React.FC = () => {
                       className={`btn-i l1-i ${(language as Lang) === 'da' ? '_active' : ''}`}
                       onClick={() => setLanguage('da')}
                     >
-                      Damuna
+                      Dʉmʉna
                     </button>
                   </div>
                   <div className="about-title">
-                    <p className="p2-ii _lgt _capitalize">Shama yuu anaruka</p>
-                    <h1 className="h1-i _rgl ">Gängunaka Wimarua - Waninaka Anarukua</h1>
+                    <p className="p2-ii _lgt _capitalize">ZUNGUI YUU ANARUKA</p>
+                    <h1 className="h1-i _rgl ">Gonawindua zhana suzhi tua ukuzhi </h1>
                   </div>
                   
                   <div className="about-text">
                     <p className="p1-i _lgt">
-                      Wamunka Imaginario Fundação yuga Wiwa Yugumaïun Bunkuannarrúa Tayrona, Wimarua Writer Collective, shama yuu anaruka jizhana anokuna.
+                    Gonawindua zhanandzina: “suzhindzina maiama” zhinguirru ingui iba bugui nazhi kʉnzhanekanka 
+kimʉna, memanzhe shamunku zhinguirru zhaguinuka fundación imaginario. nʉnashka, organización 
+wiwa yugumaiʉn bunkunarua Tayrona win ingui zhinzhoma gogandzina colectivo de escritores nʉn 
+zhigʉñishi shambunanka. 2015 mʉndzi iba uguia aunukurra cine, ciencia nʉn shikanzhe uruama win 
+ya guneka awega ima zhishizhama zhiguiega, kaiarru gunekega ima zhamaiama agʉñi kuazha nanega. 
+Iyaru igu Gonawindua nekʉkuazha nugame. 
                     </p>
                   </div>
                 </div>
@@ -175,8 +180,12 @@ const AboutPage: React.FC = () => {
                     />
                   </div>
                   <div className="about-text">
-                    <p className="p1-i _lgt">Gängunaka Wimarua - Waninaka Anarukua shama yuu anaruka jizhana anokuna, Wamunka Imaginario Fundação yuga Wiwa Yugumaiun Bunkuanarrúa Tayrona, Wimarua Writer Collective.</p>
-                    <p className="p1-i _lgt">Anaruka jizhana anokuna yuga wiwa kakai jizhana anokuna münnaka ammunka zhanmanka, jizhana monitores comunitarios, documentación participativa yuga materiales pedagógicos jizhana anokuna, ancestral yuga científico anaruka jizhana anokuna waninaka anarukua jizhana anokuna planeta jizhana anokuna münnaka ammunka zhanmanka jizhana anokuna ecosistemas jizhana anokuna.</p>
+                    <p className="p1-i _lgt">Iwa ya ime shikandzina kua suzhindzina asinumpana aunukamba, nawiga kʉzhigabihi naiʉn nukurra 
+mema gunamandzina kena, shikanzhe zhinzhoma asheshishi awemdzingua she ʉnkango awega 
+memengui ikuia she mʉkʉndzia awakuaga, ima guamandzina duma tuega, awashkangui ima 
+zhinzhoma científico agʉñi duma tua awega washka ekʉnagangua Suzhi ingegua dzinguakʉntengui 
+nugame. Memerru zhinchiki nazhi duma tua awega ima suzhindzina, ia asina aweru agʉñi tun 
+nanazhingurra nʉname. </p>
                   </div>
                 </div>
                 <div className="about-section-3">
@@ -194,7 +203,10 @@ const AboutPage: React.FC = () => {
                     />
                   </div>
                   <div className="about-text-2">
-                    <p className="p1-i _lgt">Shama aplicación shama yuu anaruka jizhana anokuna proceso: shama yuu anaruka jizhana anokuna nuevas generaciones waninaka anarukua jizhana anokuna, música, lengua yuga conocimiento biocultural jizhana anokuna mayores waninaka futuro.</p>
+                    <p className="p1-i _lgt">Memerru ima aplicación zhinguirru, ingui nana she ambunanka kimʉna mema ibamba mʉndzi 
+atunanka. Imamba mʉndzi nawiga sakʉn nukurra iwazhana dugandzina agʉñi shindzia awega 
+nawinzhe guama kinki, washkanguazi ima zhamaiama agʉñi duma tuega, nawi ashekurrayengui kua 
+nawinzhimamandzinaga nekʉmasha awanaingui.  </p>
                   </div>
                   <div className="about-image-2">
                     <img
