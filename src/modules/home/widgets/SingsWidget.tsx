@@ -64,13 +64,13 @@ const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
           {sing.author && (
             <div className="track-card-subtitle h4-i _lgt primary-i">{sing.author}</div>
           )}
-          <div className="l2-i p2-i _rgl primary-i">
+          {/* <div className="l2-i p2-i _rgl primary-i">
             {[
               sing.community,
               sing.instruments,
               sing.author
             ].filter(Boolean).join(' | ')}
-          </div>
+          </div> */}
         </div>
          <div className={`track-card-accordion ${isPlaying ? 'open' : ''}`}>
            <div className="in-track-card-progress">

@@ -6,6 +6,7 @@ import { mediaCacheService } from '../cache/mediaCacheService';
 
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
+type OnLoadingCb = (loadingId: string | null) => void;
 
 interface ProgressData {
   currentTime: number;
@@ -42,8 +43,10 @@ async function getFileSize(path: string): Promise<number> {
 class AudioManager {
   private audio: HTMLAudioElement | null = null;
   private playingId: string | null = null;
+  private loadingId: string | null = null;
   private cbs: OnChangeCb[] = [];
   private progressCbs: OnProgressCb[] = [];
+  private loadingCbs: OnLoadingCb[] = [];
   private animationFrameId: number | null = null;
   private lastProgressUpdate: number = 0;
   private progressTimer: any = null;
@@ -220,6 +223,9 @@ class AudioManager {
       this.progressTimer = null;
     }
 
+    // Indicar que este track está cargando
+    this.setLoading(id);
+
     // Verificar si el archivo ya está en caché
     try {
       const cached = await mediaCacheService.cacheAudio(src);
@@ -259,6 +265,8 @@ class AudioManager {
       }
     } catch (err) {
       console.warn('[AudioManager] ⚠️ No se pudo acceder al caché:', err);
+      // Si falla el caché, dejar de mostrar loading
+      this.setLoading(null);
     }
 
     // 🩵 Interceptar audios locales y convertirlos a blob seguros si es necesario
@@ -365,11 +373,13 @@ class AudioManager {
         await NativeAudio.play({ assetId: fileName });
         
         this.setPlaying(id);
+        this.setLoading(null); // Finalizar loading cuando comienza a reproducir
         this.startNativeAudioProgress();
         return;
       } catch (err) {
         console.error('[AudioManager] NativeAudio failed:', err);
         this.isUsingNativeAudio = false;
+        this.setLoading(null); // Limpiar loading si NativeAudio falla
         // Continuar con el flujo normal si NativeAudio falla
       }
     } else {
@@ -381,6 +391,7 @@ class AudioManager {
 
     // si es la misma pista, toggle play/pause
     if (this.playingId === id) {
+      this.setLoading(null); // Limpiar loading si es toggle del mismo track
       if (this.isUsingNativeAudio) {
         // Para NativeAudio, solo detener el timer
         if (this.progressTimer) {
@@ -466,20 +477,24 @@ class AudioManager {
       }
       this.stopProgressLoop();
       this.setPlaying(null);
+      this.setLoading(null); // Limpiar loading en caso de error
     };
 
     // intentar reproducir
     try {
       await this.audio.play();
       this.setPlaying(id);
+      this.setLoading(null); // Finalizar loading cuando comienza a reproducir
       console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
     } catch (e) {
       console.warn('[AudioManager] play failed:', e, 'for src:', normalizedSrc);
       this.setPlaying(null);
+      this.setLoading(null); // Finalizar loading en caso de error
     }
   }
 
   pause() {
+    this.setLoading(null); // Limpiar loading al pausar
     if (this.isUsingNativeAudio) {
       try {
         // Para NativeAudio, solo detener el timer
@@ -532,6 +547,13 @@ class AudioManager {
     return () => { this.progressCbs = this.progressCbs.filter(x => x !== cb); };
   }
 
+  onLoading(cb: OnLoadingCb) {
+    this.loadingCbs.push(cb);
+    return () => { this.loadingCbs = this.loadingCbs.filter(x => x !== cb); };
+  }
+
+  getLoadingId() { return this.loadingId; }
+
   getCurrentTime(): number {
     if (this.isUsingNativeAudio) {
       const elapsed = (Date.now() - this.nativeAudioStartTime) / 1000;
@@ -558,6 +580,15 @@ class AudioManager {
     this.cbs.forEach(cb => {
       try { cb(this.playingId); } catch (e) {
         console.warn('[AudioManager] onChange callback failed:', e);
+      }
+    });
+  }
+
+  private setLoading(id: string | null) {
+    this.loadingId = id;
+    this.loadingCbs.forEach(cb => {
+      try { cb(this.loadingId); } catch (e) {
+        console.warn('[AudioManager] onLoading callback failed:', e);
       }
     });
   }
