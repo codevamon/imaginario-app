@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { IonPage, IonContent, IonButton, IonText, IonImg } from '@ionic/react';
+import { IonPage, IonContent, IonButton, IonText, IonImg, IonSpinner } from '@ionic/react';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { mediaCacheService, ensureCachedMedia } from '../core/cache/mediaCacheService';
+import { mediaCacheService, ensureCachedMedia, verifyAudioCache } from '../core/cache/mediaCacheService';
 import { getAllTracks } from '../core/db/dao/tracks';
 import { getAllSings } from '../core/db/dao/sings';
 import { getAllInterviews } from '../core/db/dao/interviews';
@@ -33,6 +33,8 @@ const TestCachePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [cachedCount, setCachedCount] = useState(0);
   const [cacheInfo, setCacheInfo] = useState<string>('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ total: number; missing: number; refreshed: number } | null>(null);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -268,6 +270,21 @@ const TestCachePage: React.FC = () => {
     }
   };
 
+  const handleVerify = async () => {
+    try {
+      setVerifying(true);
+      addLog('🔍 Iniciando verificación de audios faltantes...');
+      const result = await verifyAudioCache();
+      setVerifyResult(result);
+      addLog(`✅ Verificación completa: ${result.total} audios, faltantes ${result.missing}, recuperados ${result.refreshed}`);
+    } catch (err) {
+      addLog(`❌ Error al verificar audios: ${err}`);
+      console.error('[TestCachePage] Error al verificar audios:', err);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
     <IonPage>
       <IonContent style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100%' }}>
@@ -329,6 +346,25 @@ const TestCachePage: React.FC = () => {
             >
               Limpiar caché
             </IonButton>
+
+            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+              <IonButton onClick={handleVerify} disabled={verifying || loading} color="primary">
+                {verifying ? (
+                  <>
+                    <IonSpinner name="dots" />
+                    &nbsp;Verificando...
+                  </>
+                ) : (
+                  'Verificar audios faltantes'
+                )}
+              </IonButton>
+
+              {verifyResult && (
+                <IonText color="medium" style={{ display: 'block', marginTop: '0.75rem' }}>
+                  Total: {verifyResult.total} · Faltantes: {verifyResult.missing} · Recuperados: {verifyResult.refreshed}
+                </IonText>
+              )}
+            </div>
           </div>
 
           {/* Información del tamaño del caché */}

@@ -29,6 +29,8 @@ import AboutPage from './modules/about/AboutPage';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
 import { pullAllTables } from './core/sync/pull';
 import Footbar from './ui/Footbar';
+import { Network } from '@capacitor/network';
+import { verifyAudioCache } from './core/cache/mediaCacheService';
 import './theme/fonts.css';
 import './theme/global.css';
 import TestCachePage from './pages/TestCachePage';
@@ -111,6 +113,37 @@ const App: React.FC = () => {
 
     initDatabase();
   }, []);
+
+  // Verificación de caché de audios al arranque (solo cuando la DB está lista)
+  useEffect(() => {
+    if (!dbReady) return; // Esperar a que la base de datos esté lista
+
+    const runVerify = async () => {
+      try {
+        const status = await Network.getStatus();
+        if (!status.connected) {
+          console.log('[Startup] 🌙 Sin conexión: se omite verificación de audios.');
+          return;
+        }
+        console.log('[Startup] 🌐 Conectado. Iniciando verificación de audios locales...');
+        const result = await verifyAudioCache();
+        console.log(
+          `[Startup] 🔎 Verificación completa: ${result.total} audios, faltantes ${result.missing}, recuperados ${result.refreshed}`
+        );
+
+        // Mostrar resumen si deseas notificar en UI
+        if (result.missing > 0 || result.refreshed > 0) {
+          console.log('[Startup] ✅ Audios sincronizados correctamente.');
+        } else {
+          console.log('[Startup] 🪶 Todos los audios ya estaban actualizados.');
+        }
+      } catch (err) {
+        console.error('[Startup] ⚠️ Error en verificación inicial de audios:', err);
+      }
+    };
+
+    runVerify();
+  }, [dbReady]);
 
   // Mostrar loading mientras se inicializa la DB
   if (!dbReady && !dbError) {

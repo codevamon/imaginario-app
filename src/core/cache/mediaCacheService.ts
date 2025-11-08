@@ -1,4 +1,6 @@
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Network } from '@capacitor/network';
+import { getDb } from '../sqlite';
 
 const DEBUG = import.meta.env.VITE_DEBUG_CACHE === 'true';
 
@@ -396,60 +398,114 @@ async function cacheImage(url?: string | null): Promise<string | undefined> {
 }
 
 /**
- * Cachea un audio desde una URL
+ * Cachea un audio desde una URL (versión 2025-11 reforzada con verificación, retry y mutex).
  */
+const cacheLocks = new Map<string, Promise<string | undefined>>(); // evita escrituras simultáneas
+
 async function cacheAudio(url?: string | null): Promise<string | undefined> {
   if (!url) {
-    log('URL vacía, retornando undefined');
+    log('[CacheAudio] URL vacía, retornando undefined');
     return undefined;
   }
-  
-  // Verificar si estamos en plataforma nativa
+
   const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
   if (!isNative) {
-    log('No es plataforma nativa, retornando URL original');
+    log('[CacheAudio] No es plataforma nativa, retornando URL original');
     return url;
   }
-  
-  try {
-    // Asegurar que el directorio existe
-    await ensureDir(CACHE_CONFIG.audioDir);
-    
-    // Generar hash y obtener extensión
-    const hash = await hashUrl(url);
-    const ext = getExtensionFromUrl(url, 'audio');
-    const fileName = `${hash}${ext}`;
-    const filePath = `${CACHE_CONFIG.audioDir}/${fileName}`;
-    
-    // Verificar si el archivo ya existe
+
+  // 🧩 Hash único por URL
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  const path = `imaginario/audio/${hashHex}.mp3`;
+
+  // 🧱 Mutex: si ya hay una escritura activa, esperar a que termine
+  while (cacheLocks.has(hashHex)) {
+    log(`[CacheAudio] ⏳ Esperando bloqueo activo para ${hashHex}`);
+    await cacheLocks.get(hashHex);
+  }
+
+  const lock = (async () => {
     try {
-      await Filesystem.stat({
-        path: filePath,
-        directory: Directory.Data,
+      // ✅ Si ya existe, devolverlo
+      try {
+        const stat = await Filesystem.stat({ path, directory: Directory.Data });
+        if (stat?.size && stat.size > 1024) {
+          log(`[CacheAudio] 🟢 Ya en caché (${(stat.size / 1024).toFixed(1)} KB)`);
+          return stat.uri || (await Filesystem.getUri({ path, directory: Directory.Data })).uri;
+        }
+      } catch {
+        // no existe, continúa
+      }
+
+      // 🌐 Descargar blob remoto
+      log(`[CacheAudio] ⬇️ Descargando: ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+
+      // 🧪 Validar blob real
+      if (!blob || blob.size < 1024) {
+        console.warn(`[CacheAudio] ⚠️ Blob inválido o vacío (${blob?.size} bytes) para ${url}`);
+        return undefined;
+      }
+
+      // 🧬 Convertir a base64
+      const base64data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          if (typeof result === 'string') resolve(result.split(',')[1]);
+          else reject('Error al convertir blob a base64');
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
-      log('Audio ya cacheado:', filePath);
-    } catch {
-      // El archivo no existe, descargarlo
-      log('Audio no encontrado en caché, descargando...');
-      await downloadTo(filePath, url);
-      
-      // Verificar límite después de descargar
-      await enforceCacheLimit();
+
+      // 🗂 Crear directorio si no existe
+      try {
+        await Filesystem.mkdir({ path: 'imaginario/audio', directory: Directory.Data, recursive: true });
+      } catch {}
+
+      // 💾 Escribir archivo con verificación y reintento
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await Filesystem.writeFile({
+            path,
+            data: base64data,
+            directory: Directory.Data,
+            encoding: 'base64' as Encoding,
+            recursive: true,
+          });
+
+          const stat = await Filesystem.stat({ path, directory: Directory.Data });
+          if (stat?.size && stat.size > 1024) {
+            log(`[CacheAudio] ✅ Guardado OK (${(stat.size / 1024).toFixed(1)} KB): ${path}`);
+            return stat.uri || (await Filesystem.getUri({ path, directory: Directory.Data })).uri;
+          }
+
+          console.warn(`[CacheAudio] ⚠️ Archivo sospechoso (${stat?.size || 0} bytes), reintentando (${attempt})`);
+          await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
+          await new Promise(r => setTimeout(r, 300));
+        } catch (err) {
+          console.error(`[CacheAudio] ❌ Falla al escribir intento ${attempt}`, err);
+        }
+      }
+
+      console.error(`[CacheAudio] ❌ No se pudo guardar ${url} tras 2 intentos`);
+      return undefined;
+    } catch (err) {
+      console.error('[CacheAudio] ❌ Error general:', url, err);
+      return undefined;
+    } finally {
+      cacheLocks.delete(hashHex); // liberar el bloqueo
     }
-    
-    // Obtener URI local
-    const uriResult = await Filesystem.getUri({
-      path: filePath,
-      directory: Directory.Data,
-    });
-    
-    log('URI local generada:', uriResult.uri);
-    return uriResult.uri;
-  } catch (error) {
-    logError('Error cacheando audio:', url, error);
-    // En caso de error, retornar la URL original como fallback
-    return url;
-  }
+  })();
+
+  cacheLocks.set(hashHex, lock);
+  return await lock;
 }
 
 // ✅ Helper unificado para medios
@@ -563,4 +619,135 @@ export const mediaCacheService = {
 
 // Exportar funciones individuales para compatibilidad
 export { cacheImage, cacheAudio, getCacheSize, clearCache };
+
+/**
+ * Garantiza que el directorio de audios exista, sin lanzar error si ya está creado.
+ */
+async function ensureAudioDir() {
+  try {
+    await Filesystem.mkdir({
+      path: 'imaginario/audio',
+      directory: Directory.Data,
+      recursive: true,
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('already exists')) {
+      // Silencio: carpeta ya creada
+    } else {
+      console.warn('[AudioCache] ⚠️ mkdir error no crítico:', err.message);
+    }
+  }
+}
+
+/**
+ * Descarga un archivo de audio por streaming (seguro para grandes tamaños)
+ * con verificación final post-escritura.
+ */
+async function downloadAudioStream(url: string, destPath: string): Promise<void> {
+  await ensureAudioDir();
+
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(`[StreamSave] Respuesta inválida para ${url}`);
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      totalBytes += value.length;
+      if (totalBytes > 200 * 1024 * 1024) throw new Error('[StreamSave] Archivo demasiado grande (>200MB)');
+    }
+  }
+
+  const blob = new Blob(chunks as BlobPart[], { type: 'audio/mpeg' });
+  const base64Data = await blobToBase64(blob);
+  await Filesystem.writeFile({
+    path: destPath,
+    data: base64Data,
+    directory: Directory.Data,
+    encoding: 'base64' as Encoding,
+    recursive: true,
+  });
+
+  // 🔁 Verificación post-escritura
+  try {
+    const stat = await Filesystem.stat({ path: destPath, directory: Directory.Data });
+    console.log(`[StreamSave] ✅ Guardado OK (${(stat.size / 1024 / 1024).toFixed(2)} MB) en ${destPath}`);
+  } catch {
+    console.error(`[StreamSave] ⚠️ No se pudo verificar escritura de ${destPath}`);
+  }
+
+  // 🧹 Aplicar límite global del caché
+  await enforceCacheLimit();
+}
+
+/**
+ * Versión ajustada de verifyAudioCache() con manejo de mkdir y verificación final
+ */
+export async function verifyAudioCache(): Promise<{ total: number; missing: number; refreshed: number }> {
+  console.log('[VerifyCache] 🔍 Iniciando verificación de audios...');
+  let total = 0;
+  let missing = 0;
+  let refreshed = 0;
+
+  await ensureAudioDir();
+
+  try {
+    // Usar la conexión compartida de la base de datos
+    const dbConn = await getDb();
+
+    const res = await dbConn.query('SELECT id, audio_url, updated_at FROM tracks WHERE deleted_at IS NULL');
+    const tracks = res.values || [];
+    total = tracks.length;
+
+    const status = await Network.getStatus();
+    const isOnline = status.connected;
+
+    for (const track of tracks) {
+      const url = track.audio_url;
+      if (!url) continue;
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
+      const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const path = `imaginario/audio/${hashHex}.mp3`;
+
+      try {
+        const stat = await Filesystem.stat({ path, directory: Directory.Data });
+        if (!stat.size || stat.size < 100) throw new Error('Archivo vacío');
+      } catch {
+        missing++;
+        console.warn(`[VerifyCache] ❌ Faltante: ${url}`);
+
+        if (isOnline) {
+          try {
+            const head = await fetch(url, { method: 'HEAD' });
+            const contentLength = parseInt(head.headers.get('content-length') || '0');
+            if (contentLength > 10 * 1024 * 1024) {
+              await downloadAudioStream(url, path);
+            } else {
+              await cacheAudio(url);
+            }
+            // 🧹 Aplicar límite del caché tras descarga individual
+            await enforceCacheLimit();
+            refreshed++;
+          } catch (err) {
+            console.error(`[VerifyCache] ⚠️ Error al recuperar ${url}`, err);
+          }
+        }
+      }
+    }
+
+    // Nota: No cerramos la conexión ya que getDb() maneja una conexión compartida
+  } catch (err) {
+    console.error('[VerifyCache] 🛑 Error general en verificación', err);
+  }
+
+  console.log(`[VerifyCache] ✅ Finalizado: total=${total}, faltantes=${missing}, recuperados=${refreshed}`);
+  return { total, missing, refreshed };
+}
 
