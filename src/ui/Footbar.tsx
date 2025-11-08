@@ -1,16 +1,44 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import { useLocation } from 'react-router-dom';
-import { IonFab, IonFabButton, IonIcon } from '@ionic/react';
-import { bug } from 'ionicons/icons';
+import { IonFab, IonFabButton, IonIcon, IonModal, IonText } from '@ionic/react';
+import { refresh } from 'ionicons/icons';
+import { Preferences } from '@capacitor/preferences';
+import { useCacheManager } from '../core/hooks/useCacheManager';
 import './Footbar.css';
 
 const Footbar: React.FC = () => {
   const router = useIonRouter();
   const location = useLocation();
+  const { clearAndDownloadAll, progress, showProgressModal, setShowProgressModal } = useCacheManager();
+  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    Preferences.get({ key: 'hasDownloaded' }).then((res) => {
+      setHasDownloaded(res.value === 'true');
+    });
+  }, []);
+
+  // Actualizar estado cuando el modal se cierre después de completar la descarga
+  useEffect(() => {
+    if (!showProgressModal && progress === 100) {
+      Preferences.get({ key: 'hasDownloaded' }).then((res) => {
+        setHasDownloaded(res.value === 'true');
+      });
+    }
+  }, [showProgressModal, progress]);
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path);
+  };
+
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    await clearAndDownloadAll();
+    setDownloading(false);
+    setHasDownloaded(true);
   };
 
   return (
@@ -86,11 +114,60 @@ const Footbar: React.FC = () => {
         
       </div>
 
-      <IonFab vertical="bottom" horizontal="end" slot="fixed" style={{ bottom: '90px', right: '16px' }}>
-        <IonFabButton size="small" color="medium" onClick={() => router.push('/test-cache')}>
-          <IonIcon icon={bug} />
-        </IonFabButton>
-      </IonFab>
+      {/* Botón flotante — solo visible si no se ha descargado todo */}
+      {!hasDownloaded && (
+        <IonFab vertical="bottom" horizontal="end" slot="fixed" style={{ bottom: '90px', right: '16px' }}>
+          <IonFabButton size="small" color="medium" onClick={handleDownload} disabled={downloading}>
+            <IonIcon icon={refresh} />
+          </IonFabButton>
+        </IonFab>
+      )}
+
+      {/* Modal de progreso */}
+      <IonModal isOpen={showProgressModal} backdropDismiss={false}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            padding: '24px',
+            textAlign: 'center',
+            animation: 'fadeIn 0.3s ease',
+          }}
+        >
+          {progress < 100 ? (
+            <>
+              <IonText><h3>Descargando contenido...</h3></IonText>
+              <div
+                style={{
+                  width: '80%',
+                  height: '12px',
+                  background: '#eee',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  margin: '16px 0',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${progress}%`,
+                    height: '100%',
+                    background: '#4caf50',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+              <IonText>{progress}%</IonText>
+            </>
+          ) : (
+            <>
+              <IonText><h3>✅ Descarga completa</h3></IonText>
+            </>
+          )}
+        </div>
+      </IonModal>
     </footer>
   );
 };

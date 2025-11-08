@@ -32,6 +32,7 @@ import Footbar from './ui/Footbar';
 import './theme/fonts.css';
 import './theme/global.css';
 import TestCachePage from './pages/TestCachePage';
+import AppNavbar from './ui/AppNavbar';
 
 setupIonicReact();
 
