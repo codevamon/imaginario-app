@@ -389,19 +389,6 @@ const TestCachePage: React.FC = () => {
           </div>
 
           {/* URLs de prueba */}
-          <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-            <IonText>
-              <p style={{ fontSize: '12px', margin: 0 }}>
-                <strong>URLs de prueba:</strong>
-              </p>
-              <p style={{ fontSize: '11px', margin: '4px 0', wordBreak: 'break-all' }}>
-                Imagen: {testImage}
-              </p>
-              <p style={{ fontSize: '11px', margin: '4px 0', wordBreak: 'break-all' }}>
-                Audio: {testAudio}
-              </p>
-            </IonText>
-          </div>
         </div>
       </IonContent>
     </IonPage>
