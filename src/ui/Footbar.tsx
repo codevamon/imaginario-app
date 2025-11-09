@@ -2,15 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import { useLocation } from 'react-router-dom';
 import { IonFab, IonFabButton, IonIcon, IonModal, IonText } from '@ionic/react';
-import { refresh } from 'ionicons/icons';
+import { downloadOutline } from 'ionicons/icons';
 import { Preferences } from '@capacitor/preferences';
 import { useCacheManager } from '../core/hooks/useCacheManager';
+import { useAudioVerification } from '../core/hooks/useAudioVerification';
 import './Footbar.css';
 
 const Footbar: React.FC = () => {
   const router = useIonRouter();
   const location = useLocation();
   const { clearAndDownloadAll, progress, showProgressModal, setShowProgressModal } = useCacheManager();
+  const { startVerification } = useAudioVerification();
   const [hasDownloaded, setHasDownloaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -39,6 +41,10 @@ const Footbar: React.FC = () => {
     await clearAndDownloadAll();
     setDownloading(false);
     setHasDownloaded(true);
+    
+    // Iniciar verificación de audios después de la descarga completa
+    console.log('[VerifyTrigger] 🔁 Verificación iniciada tras descarga completa');
+    await startVerification();
   };
 
   return (
@@ -117,8 +123,13 @@ const Footbar: React.FC = () => {
       {/* Botón flotante — solo visible si no se ha descargado todo */}
       {!hasDownloaded && (
         <IonFab vertical="bottom" horizontal="end" slot="fixed" style={{ bottom: '90px', right: '16px' }}>
-          <IonFabButton size="small" color="medium" onClick={handleDownload} disabled={downloading}>
-            <IonIcon icon={refresh} />
+          <IonFabButton
+            size="small"
+            onClick={handleDownload}
+            disabled={downloading}
+            style={{ backgroundColor: '#0a3731', color: '#fff', borderRadius: '50%' }}
+          >
+            <IonIcon icon={downloadOutline} />
           </IonFabButton>
         </IonFab>
       )}

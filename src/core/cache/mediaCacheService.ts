@@ -449,6 +449,7 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
       // 🧪 Validar blob real
       if (!blob || blob.size < 1024) {
         console.warn(`[CacheAudio] ⚠️ Blob inválido o vacío (${blob?.size} bytes) para ${url}`);
+        console.warn(`[DebugCacheAudio] Fallo al guardar: ${url} (blob inválido o vacío)`);
         return undefined;
       }
 
@@ -495,9 +496,11 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
       }
 
       console.error(`[CacheAudio] ❌ No se pudo guardar ${url} tras 2 intentos`);
+      console.warn(`[DebugCacheAudio] Fallo al guardar: ${url}`);
       return undefined;
     } catch (err) {
       console.error('[CacheAudio] ❌ Error general:', url, err);
+      console.warn(`[DebugCacheAudio] Fallo al guardar: ${url}`);
       return undefined;
     } finally {
       cacheLocks.delete(hashHex); // liberar el bloqueo
@@ -749,5 +752,175 @@ export async function verifyAudioCache(): Promise<{ total: number; missing: numb
 
   console.log(`[VerifyCache] ✅ Finalizado: total=${total}, faltantes=${missing}, recuperados=${refreshed}`);
   return { total, missing, refreshed };
+}
+
+/**
+ * Verifica el caché de audios con progreso continuo y validación real de archivos
+ * @param onProgress Callback opcional que se llama cada vez que se verifica un audio
+ * @returns Resumen final con total, missing y completed
+ */
+export async function verifyAudioCacheWithProgress(
+  onProgress?: (status: { total: number; checked: number; missing: number; downloading: number; completed: number; }) => void
+): Promise<{ total: number; missing: number; completed: number; }> {
+  console.log('[DebugVerify] Iniciando verificación progresiva de audios...');
+  console.log('[VerifyAudio] 🔍 Iniciando verificación de audios con progreso...');
+  
+  let total = 0;
+  let checked = 0;
+  let missing = 0;
+  let downloading = 0;
+  let completed = 0;
+  const MIN_SIZE_BYTES = 100000; // 100 KB
+
+  await ensureAudioDir();
+
+  try {
+    // Usar la conexión compartida de la base de datos
+    const dbConn = await getDb();
+
+    const res = await dbConn.query('SELECT id, audio_url, updated_at FROM tracks WHERE deleted_at IS NULL');
+    const tracks = res.values || [];
+    total = tracks.length;
+
+    const status = await Network.getStatus();
+    const isOnline = status.connected;
+
+    // Función helper para notificar progreso
+    const notifyProgress = () => {
+      onProgress?.({ total, checked, missing, downloading, completed });
+    };
+
+    for (const track of tracks) {
+      const url = track.audio_url;
+      if (!url) {
+        checked++;
+        notifyProgress();
+        continue;
+      }
+
+      console.log(`[DebugVerify] Revisión ${checked + 1}/${total} → ${url}`);
+
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
+      const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const path = `imaginario/audio/${hashHex}.mp3`;
+
+      let fileExists = false;
+      let fileSizeValid = false;
+
+      // Verificar si el archivo existe y tiene tamaño válido
+      try {
+        const stat = await Filesystem.stat({ path, directory: Directory.Data });
+        if (stat?.size && stat.size > 100 * 1024) {
+          fileExists = true;
+          fileSizeValid = true;
+          completed++;
+          checked++;
+          console.log(`[VerifyAudio] ✅ Audio completo: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
+          notifyProgress();
+          continue;
+        } else {
+          // Archivo existe pero es muy pequeño (incompleto) o vacío
+          fileExists = true;
+          fileSizeValid = false;
+          console.warn(`[DebugVerify] Archivo sospechoso o vacío: ${path} (tamaño: ${stat?.size || 0} bytes, mínimo requerido: ${100 * 1024} bytes)`);
+          console.warn(`[VerifyAudio] ⚠️ Audio incompleto: ${url} (${stat.size} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
+        }
+      } catch (statError) {
+        // Archivo no existe
+        fileExists = false;
+        fileSizeValid = false;
+        console.log(`[DebugVerify] Archivo no existe: ${path}`);
+      }
+
+      // Si el archivo no existe o es incompleto, intentar descargarlo
+      if (!fileExists || !fileSizeValid) {
+        missing++;
+        checked++;
+        notifyProgress();
+
+        if (isOnline) {
+          downloading++;
+          notifyProgress();
+
+          let downloadSuccess = false;
+          let attempts = 0;
+          const maxAttempts = 2;
+
+          while (attempts < maxAttempts && !downloadSuccess) {
+            attempts++;
+            try {
+              console.log(`[VerifyAudio] ⬇️ Descargando (intento ${attempts}/${maxAttempts}): ${url}`);
+
+              // Verificar tamaño remoto antes de descargar
+              const head = await fetch(url, { method: 'HEAD' });
+              const contentLength = parseInt(head.headers.get('content-length') || '0');
+
+              if (contentLength > 0 && contentLength < MIN_SIZE_BYTES) {
+                console.warn(`[VerifyAudio] ⚠️ Archivo remoto muy pequeño (${contentLength} bytes), puede estar incompleto`);
+              }
+
+              // Descargar según el tamaño
+              if (contentLength > 10 * 1024 * 1024) {
+                await downloadAudioStream(url, path);
+              } else {
+                await cacheAudio(url);
+              }
+
+              // Verificar tamaño después de la descarga
+              try {
+                const stat = await Filesystem.stat({ path, directory: Directory.Data });
+                if (stat?.size && stat.size > 100 * 1024) {
+                  downloadSuccess = true;
+                  completed++;
+                  console.log(`[VerifyAudio] ✅ Descarga exitosa: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
+                } else {
+                  console.warn(`[DebugVerify] Archivo descargado sospechoso o vacío: ${path} (tamaño: ${stat?.size || 0} bytes, mínimo requerido: ${100 * 1024} bytes)`);
+                  console.warn(`[VerifyAudio] ⚠️ Archivo descargado incompleto (${stat.size || 0} bytes), reintentando...`);
+                  // Eliminar archivo incompleto antes de reintentar
+                  await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
+                  if (attempts < maxAttempts) {
+                    await new Promise(r => setTimeout(r, 500)); // Pequeña pausa antes de reintentar
+                  }
+                }
+              } catch (statError) {
+                console.error(`[DebugVerify] Error al verificar archivo descargado: ${path}`, statError);
+                console.error(`[VerifyAudio] ❌ Error verificando archivo descargado: ${url}`, statError);
+                if (attempts < maxAttempts) {
+                  await new Promise(r => setTimeout(r, 500));
+                }
+              }
+
+              // Aplicar límite del caché tras descarga individual
+              await enforceCacheLimit();
+            } catch (err) {
+              console.error(`[VerifyAudio] ❌ Error al descargar (intento ${attempts}/${maxAttempts}): ${url}`, err);
+              if (attempts < maxAttempts) {
+                await new Promise(r => setTimeout(r, 500));
+              }
+            }
+          }
+
+          if (!downloadSuccess) {
+            console.error(`[VerifyAudio] ❌ No se pudo descargar/validar ${url} tras ${maxAttempts} intentos, marcado como incompleto`);
+          }
+
+          downloading--;
+          notifyProgress();
+        } else {
+          console.warn(`[VerifyAudio] ⚠️ Sin conexión, no se puede descargar: ${url}`);
+        }
+      }
+    }
+
+    // Nota: No cerramos la conexión ya que getDb() maneja una conexión compartida
+  } catch (err) {
+    console.error('[VerifyAudio] 🛑 Error general en verificación', err);
+  }
+
+  const summary = `[VerifyAudio] ✅ Finalizado: ${total} audios, ${completed} completos, ${missing} faltantes.`;
+  console.log(summary);
+  console.log(`[DebugVerify] ✅ Finalizado — total=${total}, completos=${completed}, faltantes=${missing}`);
+  
+  return { total, missing, completed };
 }
 

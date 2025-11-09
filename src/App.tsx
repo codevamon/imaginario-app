@@ -30,11 +30,11 @@ import { initDb, resetDb, isDbReady } from './core/sqlite';
 import { pullAllTables } from './core/sync/pull';
 import Footbar from './ui/Footbar';
 import { Network } from '@capacitor/network';
-import { verifyAudioCache } from './core/cache/mediaCacheService';
+import { PluginListenerHandle } from '@capacitor/core';
+import { verifyAudioCache, verifyAudioCacheWithProgress } from './core/cache/mediaCacheService';
 import './theme/fonts.css';
 import './theme/global.css';
 import TestCachePage from './pages/TestCachePage';
-import AppNavbar from './ui/AppNavbar';
 
 setupIonicReact();
 
@@ -145,6 +145,33 @@ const App: React.FC = () => {
     runVerify();
   }, [dbReady]);
 
+  // Escuchar cambios de red y verificar audios automáticamente cuando hay conexión
+  useEffect(() => {
+    if (!dbReady) return; // Esperar a que la base de datos esté lista
+
+    let listenerHandle: PluginListenerHandle | null = null;
+
+    (async () => {
+      listenerHandle = await Network.addListener('networkStatusChange', async (status) => {
+        if (status.connected) {
+          console.log('[Network] 🌐 Conexión detectada. Iniciando verificación de audios en background...');
+          // Ejecutar en background sin bloquear
+          verifyAudioCacheWithProgress().catch((err) => {
+            console.error('[Network] ⚠️ Error en verificación automática de audios:', err);
+          });
+        }
+      });
+    })();
+
+    return () => {
+      (async () => {
+        if (listenerHandle) {
+          await listenerHandle.remove();
+        }
+      })();
+    };
+  }, [dbReady]);
+
   // Mostrar loading mientras se inicializa la DB
   if (!dbReady && !dbError) {
     return (
@@ -238,6 +265,7 @@ const App: React.FC = () => {
           {/* Landing */}
           <Route exact path="/"><Redirect to="/home" /></Route>
         </IonRouterOutlet>
+        
         
         {/* Footbar persistente */}
         <Footbar />

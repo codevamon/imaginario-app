@@ -1,11 +1,13 @@
 // src/modules/home/widgets/SingsWidget.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { play, pause } from 'ionicons/icons';
-import { IonIcon, IonText } from '@ionic/react';
+import { IonIcon, IonText, IonSpinner } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
 import type { Sing } from '../../../core/db/dao/sings';
 import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
+import { useAudioLoading } from '../../../core/audio/useAudioLoading';
+import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
 import './SingsWidget.css';
 
 type Props = {
@@ -23,6 +25,8 @@ interface SingCardProps {
 
 const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
+  const isLoading = useAudioLoading(sing.id);
+  const isRepairing = useAudioRepairing(sing.id);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -52,10 +56,19 @@ const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
           onToggle(sing.id, sing.audio_url!);
         }}
       >
-        <IonIcon
-          icon={isPlaying ? pause : play}
-          className={`track-icon ${isPlaying ? 'playing' : ''}`}
-        />
+        {isRepairing ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#f59e0b' }}>
+            <IonSpinner style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+            <span>Reparando…</span>
+          </div>
+        ) : isLoading ? (
+          <IonSpinner style={{ width: '24px', height: '24px' }} />
+        ) : (
+          <IonIcon
+            icon={isPlaying ? pause : play}
+            className={`track-icon ${isPlaying ? 'playing' : ''}`}
+          />
+        )}
       </button>
 
       <div className="track-card-info">

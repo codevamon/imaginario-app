@@ -1,18 +1,92 @@
 // src/core/audio/player.ts
 // Robust AudioManager singleton: controla 1 <audio> global, normaliza URLs y maneja errores.
 import { NativeAudio } from '@capacitor-community/native-audio';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Network } from '@capacitor/network';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { mediaCacheService, ensureCachedMedia } from '../cache/mediaCacheService';
+import { revalidateAudio } from '../hooks/useAudioVerification';
 
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
 type OnLoadingCb = (loadingId: string | null) => void;
+type OnRepairingCb = (repairingId: string | null) => void;
 
 interface ProgressData {
   currentTime: number;
   duration: number;
   progress: number;
+}
+
+/**
+ * Re-descarga un archivo de audio desde la URL original
+ */
+async function reDownloadAudio(url: string, hash: string): Promise<void> {
+  try {
+    console.log('[AudioManager] 🔄 Re-descargando audio:', url);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} al re-descargar ${url}`);
+    }
+    const blob = await res.blob();
+    
+    // Validar que el blob tenga contenido
+    if (!blob || blob.size < 1024) {
+      throw new Error(`Blob inválido o vacío (${blob?.size || 0} bytes)`);
+    }
+    
+    // Convertir blob a base64 de forma segura
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    
+    // Convertir bytes a base64 de forma eficiente para archivos grandes
+    let base64 = '';
+    const chunkSize = 8192; // Procesar en chunks para evitar problemas con archivos grandes
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.slice(i, i + chunkSize);
+      base64 += btoa(String.fromCharCode(...chunk));
+    }
+    
+    // Asegurar que el directorio existe
+    await Filesystem.mkdir({
+      path: 'imaginario/audio',
+      directory: Directory.Data,
+      recursive: true,
+    }).catch(() => {}); // Ignorar si ya existe
+    
+    // Eliminar archivo corrupto anterior si existe
+    try {
+      await Filesystem.deleteFile({
+        path: `imaginario/audio/${hash}.mp3`,
+        directory: Directory.Data,
+      });
+    } catch {} // Ignorar si no existe
+    
+    // Escribir archivo nuevo
+    await Filesystem.writeFile({
+      path: `imaginario/audio/${hash}.mp3`,
+      data: base64,
+      directory: Directory.Data,
+      encoding: 'base64' as Encoding,
+      recursive: true,
+    });
+    
+    // Verificar que el archivo se escribió correctamente
+    const stat = await Filesystem.stat({
+      path: `imaginario/audio/${hash}.mp3`,
+      directory: Directory.Data,
+    });
+    
+    if (!stat || (stat.size || 0) < 1024) {
+      throw new Error(`Archivo re-descargado tiene tamaño inválido (${stat?.size || 0} bytes)`);
+    }
+    
+    console.log('[AudioManager] ✅ Re-descarga completada para:', hash, `(${(stat.size / 1024).toFixed(1)} KB)`);
+  } catch (err) {
+    console.error('[AudioManager] ❌ Error en re-descarga:', err);
+    throw err;
+  }
 }
 
 async function getFileSize(path: string): Promise<number> {
@@ -73,6 +147,60 @@ async function sha256(url: string): Promise<string> {
 }
 
 /**
+ * Función auxiliar para obtener hash del audio desde la URL
+ * Usa SHA-256 para generar un hash consistente (igual que prepareSource)
+ */
+async function getAudioHash(url: string): Promise<string> {
+  // Usar la misma función sha256 que se usa en prepareSource para consistencia
+  return await sha256(url);
+}
+
+/**
+ * Obtiene una URL segura para reproducir audio offline, evitando blobs corruptos
+ */
+async function getSafeAudioUrl(path: string): Promise<string> {
+  // 1. Si ya tenemos un blob:https, usarlo
+  if (path.startsWith('blob:') || path.startsWith('http')) return path;
+
+  // 2. Intentar resolver URI nativa
+  try {
+    const { uri } = await Filesystem.getUri({
+      directory: Directory.Data,
+      path,
+    });
+    const fileUri = Capacitor.convertFileSrc(uri);
+    console.log('[AudioManager] 🎧 Archivo reproducible localmente:', fileUri);
+    return fileUri;
+  } catch (err) {
+    console.warn('[AudioManager] ❌ No se pudo obtener URI nativa:', err);
+  }
+
+  // 3. Si todo falla, fallback seguro usando streaming Base64
+  try {
+    const result = await Filesystem.readFile({
+      path,
+      directory: Directory.Data,
+    });
+    const base64Data = typeof result.data === 'string' ? result.data : '';
+    if (!base64Data) {
+      throw new Error('No se pudo leer datos del archivo');
+    }
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length)
+      .fill(0)
+      .map((_, i) => byteCharacters.charCodeAt(i));
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'audio/mpeg' });
+    const blobUrl = URL.createObjectURL(blob);
+    console.log('[AudioManager] ✅ Fallback a Blob URL exitoso');
+    return blobUrl;
+  } catch (err) {
+    console.error('[AudioManager] 🚫 Error en fallback a Blob URL:', err);
+    throw err;
+  }
+}
+
+/**
  * Prepara la fuente de audio: prioriza medios cacheados, descarga en background si hay conexión
  */
 async function prepareSource(originalSrc: string, id: string): Promise<string> {
@@ -119,15 +247,18 @@ class AudioManager {
   private audio: HTMLAudioElement | null = null;
   private playingId: string | null = null;
   private loadingId: string | null = null;
+  private repairingId: string | null = null;
   private cbs: OnChangeCb[] = [];
   private progressCbs: OnProgressCb[] = [];
   private loadingCbs: OnLoadingCb[] = [];
+  private repairingCbs: OnRepairingCb[] = [];
   private animationFrameId: number | null = null;
   private lastProgressUpdate: number = 0;
   private progressTimer: any = null;
   private nativeAudioStartTime: number = 0;
   private nativeAudioDuration: number = 0;
   private isUsingNativeAudio: boolean = false;
+  public lastPathname: string = '';
 
   private startProgressLoop() {
     if (this.animationFrameId) {
@@ -319,10 +450,10 @@ class AudioManager {
       console.log('[AudioManager] 🌐 Usando fuente remota:', src);
     }
 
-    // 🩵 Interceptar audios locales y convertirlos a blob seguros si es necesario
+    // 🩵 Interceptar audios locales y convertirlos a URL segura para reproducción offline
     if (src.startsWith('file://')) {
       try {
-        console.log('[AudioManager] 🪶 Generando blob URL local para:', src);
+        console.log('[DebugAudioPlayer] Preparando reproducción desde:', src);
 
         // Extraer path relativo desde file://
         let relativePath = src.replace('file://', '').replace(/^\/data\/user\/0\/[^/]+\/files\//, '');
@@ -334,41 +465,41 @@ class AudioManager {
           relativePath = `imaginario/audio/${fileName}`;
         }
 
-        // Leer el archivo local en base64
-        const readResult = await Filesystem.readFile({
-          path: relativePath,
-          directory: Directory.Data,
-        });
-
-        // Decodificar base64 a bytes
-        const base64Data = typeof readResult.data === 'string' ? readResult.data : '';
-        const binary = atob(base64Data);
-        const arrayBuffer = new ArrayBuffer(binary.length);
-        const view = new Uint8Array(arrayBuffer);
-        for (let i = 0; i < binary.length; i++) {
-          view[i] = binary.charCodeAt(i);
-        }
-
-        // 🔹 Detectar tipo de audio según extensión
-        let mimeType = 'audio/mpeg';
-        if (src.endsWith('.wav')) mimeType = 'audio/wav';
-        if (src.endsWith('.ogg')) mimeType = 'audio/ogg';
-
-        // Crear blob con MIME explícito
-        const blob = new Blob([view], { type: mimeType });
-
-        // Crear URL de blob
-        const blobUrl = URL.createObjectURL(blob);
-        console.log('[AudioManager] ✅ Blob URL lista para reproducción:', blobUrl);
-
-        src = blobUrl; // Sobrescribir src para reproducción
+        // Usar función robusta para obtener URL segura
+        src = await getSafeAudioUrl(relativePath);
+        console.log('[DebugAudioPlayer] URL final:', src);
       } catch (err) {
-        console.error('[AudioManager] ❌ Error al crear blob URL local:', err);
+        console.error('[AudioManager] ❌ Error al obtener URL segura para audio local:', err);
       }
     }
 
     const normalizedSrc = this.normalizeSrc(src);
     console.log('[AudioManager] normalized src:', src, '->', normalizedSrc);
+
+    // Logs de diagnóstico para verificar si el archivo existe físicamente
+    console.log('[DebugAudioPlayer] Intentando reproducir:', src);
+    if (src.startsWith('file://')) {
+      try {
+        // Extraer path relativo desde file:// (similar a getFileSize)
+        let relativePath = src.replace('file://', '').replace(/^\/data\/user\/0\/[^/]+\/files\//, '');
+        if (relativePath.includes('imaginario/')) {
+          const idx = relativePath.indexOf('imaginario/');
+          relativePath = relativePath.substring(idx);
+        } else {
+          const fileName = src.split('/').pop() || '';
+          relativePath = `imaginario/audio/${fileName}`;
+        }
+        
+        const stat = await Filesystem.stat({ path: relativePath, directory: Directory.Data }).catch(() => null);
+        if (!stat) {
+          console.warn('[DebugAudioPlayer] ❌ Archivo no encontrado localmente:', src, '(path buscado:', relativePath, ')');
+        } else {
+          console.log('[DebugAudioPlayer] 🟢 Archivo encontrado en caché:', stat, '(path:', relativePath, ')');
+        }
+      } catch (err) {
+        console.warn('[DebugAudioPlayer] ❌ Error al verificar archivo:', src, err);
+      }
+    }
 
     // Verificar que la URL existe antes de intentar reproducir
     const urlExists = await this.checkUrlExists(normalizedSrc);
@@ -460,12 +591,27 @@ class AudioManager {
         this.setPlaying(null);
         console.log('[AudioManager] paused current track:', id);
       } else if (this.audio) {
-        this.audio.play().catch((e) => {
-          console.warn('[AudioManager] resume failed:', e);
-          this.setPlaying(null);
-        });
-        this.setPlaying(id);
-        console.log('[AudioManager] resumed track:', id);
+        try {
+          await this.audio.play();
+          console.log('[AudioManager] ▶️ Reproducción iniciada correctamente (resume)');
+          this.setPlaying(id);
+          console.log('[AudioManager] resumed track:', id);
+        } catch (err: any) {
+          console.warn('[AudioManager] ⚠️ Error de reproducción (resume):', err);
+          
+          // Detectar error DOMException típico de archivo corrupto
+          if (err.name === 'DOMException' || String(err).includes('DOMException')) {
+            console.warn('[AudioManager] Archivo posiblemente dañado en resume, iniciando verificación...');
+            
+            // Para resume, necesitamos obtener la URL original del track actual
+            // Como no tenemos acceso directo a originalSrc aquí, solo logueamos el error
+            console.warn('[AudioManager] ⚠️ No se puede reparar automáticamente en resume sin URL original');
+            this.setPlaying(null);
+          } else {
+            console.error('[AudioManager] Reproducción falló por otra causa (resume):', err);
+            this.setPlaying(null);
+          }
+        }
       }
       return;
     }
@@ -491,7 +637,7 @@ class AudioManager {
     // crear o reutilizar audio element
     this.audio = this.audio ?? document.createElement('audio');
     this.audio.src = normalizedSrc;
-    this.audio.preload = 'metadata';
+    this.audio.preload = 'auto';
     
     // Exponer el elemento global para acceso desde hooks
     (window as any).__IMAGINARIO_AUDIO__ = this.audio;
@@ -530,14 +676,80 @@ class AudioManager {
       this.setLoading(null); // Limpiar loading en caso de error
     };
 
-    // intentar reproducir
+    // Cargar el audio y esperar a que esté listo antes de reproducir
+    this.audio.load();
+    
+    // Esperar a que el audio esté listo (canplaythrough) para evitar DOMException en Android WebView
     try {
-      await this.audio.play();
-      this.setPlaying(id);
-      this.setLoading(null); // Finalizar loading cuando comienza a reproducir
-      console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
+      await this.waitForAudioReady(this.audio);
+      console.log('[AudioManager] 🔁 Intentando reproducir tras canplaythrough');
+      
+      try {
+        await this.audio.play();
+        console.log('[AudioManager] ▶️ Reproducción iniciada correctamente');
+        this.setPlaying(id);
+        this.setLoading(null); // Finalizar loading cuando comienza a reproducir
+        console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
+      } catch (err: any) {
+        console.warn('[AudioManager] ⚠️ Error de reproducción:', err);
+
+        // Detectar error DOMException típico de archivo corrupto
+        if (err.name === 'DOMException' || String(err).includes('DOMException')) {
+          console.warn('[AudioManager] Archivo posiblemente dañado, iniciando verificación...');
+
+          try {
+            const networkStatus = await Network.getStatus();
+            if (networkStatus.connected) {
+              console.log('[AudioManager] 🌐 En línea, re-descargando archivo...');
+              this.setRepairing(id); // Indicar que se está reparando
+              this.setLoading(id); // Mantener loading activo
+              
+              const downloadUrl = originalSrc;
+              const hash = await getAudioHash(downloadUrl);
+              await reDownloadAudio(downloadUrl, hash);
+              console.log('[AudioManager] ✅ Re-descarga completada, reintentando reproducción...');
+              
+              // Obtener nueva URL segura después de la re-descarga
+              const newPath = await getSafeAudioUrl(`imaginario/audio/${hash}.mp3`);
+              this.audio.src = newPath;
+              this.audio.load();
+              
+              // Esperar un momento antes de reintentar
+              await new Promise((r) => setTimeout(r, 500));
+              
+              // Esperar a que el audio esté listo nuevamente
+              await this.waitForAudioReady(this.audio);
+              await this.audio.play();
+              
+              console.log('[AudioManager] ✅ Reproducción exitosa tras reparación');
+              
+              // Revalidar el audio en el estado de verificación para actualizar el contador del navbar
+              await revalidateAudio(`imaginario/audio/${hash}.mp3`);
+              
+              this.setRepairing(null); // Finalizar reparación
+              this.setPlaying(id);
+              this.setLoading(null);
+            } else {
+              console.warn('[AudioManager] ❌ Sin conexión, no se puede reparar archivo corrupto');
+              this.setRepairing(null);
+              this.setPlaying(null);
+              this.setLoading(null);
+            }
+          } catch (repairErr) {
+            console.error('[AudioManager] 🚫 Fallo en la reparación automática:', repairErr);
+            this.setRepairing(null);
+            this.setPlaying(null);
+            this.setLoading(null);
+          }
+        } else {
+          console.error('[AudioManager] Reproducción falló por otra causa:', err);
+          this.setRepairing(null);
+          this.setPlaying(null);
+          this.setLoading(null);
+        }
+      }
     } catch (e) {
-      console.warn('[AudioManager] play failed:', e, 'for src:', normalizedSrc);
+      console.warn('[AudioManager] waitForAudioReady failed:', e, 'for src:', normalizedSrc);
       this.setPlaying(null);
       this.setLoading(null); // Finalizar loading en caso de error
     }
@@ -587,6 +799,10 @@ class AudioManager {
 
   getPlayingId() { return this.playingId; }
 
+  isPlaying(): boolean {
+    return this.playingId !== null;
+  }
+
   onChange(cb: OnChangeCb) {
     this.cbs.push(cb);
     return () => { this.cbs = this.cbs.filter(x => x !== cb); };
@@ -603,6 +819,13 @@ class AudioManager {
   }
 
   getLoadingId() { return this.loadingId; }
+
+  onRepairing(cb: OnRepairingCb) {
+    this.repairingCbs.push(cb);
+    return () => { this.repairingCbs = this.repairingCbs.filter(x => x !== cb); };
+  }
+
+  getRepairingId() { return this.repairingId; }
 
   getCurrentTime(): number {
     if (this.isUsingNativeAudio) {
@@ -642,6 +865,108 @@ class AudioManager {
       }
     });
   }
+
+  private setRepairing(id: string | null) {
+    this.repairingId = id;
+    this.repairingCbs.forEach(cb => {
+      try { cb(this.repairingId); } catch (e) {
+        console.warn('[AudioManager] onRepairing callback failed:', e);
+      }
+    });
+  }
+
+  /**
+   * Espera a que el audio esté listo para reproducir (canplaythrough) antes de intentar play()
+   * Evita DOMException por carga incompleta en WebView Android
+   */
+  private async waitForAudioReady(audio: HTMLAudioElement): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        console.warn('[AudioManager] ⏰ Timeout esperando canplaythrough');
+        resolve();
+      }, 4000); // máximo 4 segundos
+
+      const onReady = () => {
+        clearTimeout(timeout);
+        console.log('[AudioManager] ✅ canplaythrough detectado');
+        audio.removeEventListener('canplaythrough', onReady);
+        audio.removeEventListener('error', onError);
+        resolve();
+      };
+
+      const onError = (e: Event) => {
+        clearTimeout(timeout);
+        console.warn('[AudioManager] ⚠️ Error en carga de audio:', e);
+        audio.removeEventListener('canplaythrough', onReady);
+        audio.removeEventListener('error', onError);
+        reject(e);
+      };
+
+      audio.addEventListener('canplaythrough', onReady, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+    });
+  }
 }
 
 export const audioManager = new AudioManager();
+
+// 🧭 Pausar audio automáticamente en cambios de página o visibilidad
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const pauseIfPlaying = () => {
+    try {
+      if (audioManager?.isPlaying && audioManager.isPlaying()) {
+        console.log('[AudioManager] ⏸️ Pausa automática por cambio de vista.');
+        audioManager.pause();
+      }
+    } catch (err) {
+      console.warn('[AudioManager] Error al pausar automáticamente:', err);
+    }
+  };
+
+  // Cuando se cambia de pestaña o la app pasa a segundo plano
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pauseIfPlaying();
+  });
+
+  // Cuando cambia la ruta interna de Ionic / React Router
+  window.addEventListener('ionRouteWillChange', pauseIfPlaying);
+  window.addEventListener('popstate', pauseIfPlaying);
+  window.addEventListener('beforeunload', pauseIfPlaying);
+
+  // 📱 Pausar audio cuando la app se va al background (modo nativo)
+  try {
+    App.addListener('pause', () => {
+      pauseIfPlaying();
+    });
+  } catch (err) {
+    console.warn('[AudioManager] No se pudo registrar App.pause:', err);
+  }
+
+  // 🚦 Pausar audio al cambiar de ruta o módulo
+  try {
+    // Inicializar lastPathname
+    audioManager.lastPathname = window.location.pathname;
+
+    window.addEventListener('ionRouteWillChange', () => {
+      pauseIfPlaying();
+    });
+
+    // También cubrir navegación directa por React Router (push, back, forward)
+    window.addEventListener('popstate', () => {
+      pauseIfPlaying();
+    });
+
+    // Monitor global de cambios de URL con MutationObserver (fallback en caso de router.push interno)
+    const observer = new MutationObserver(() => {
+      const currentPath = window.location.pathname;
+      if (audioManager?.isPlaying() && currentPath !== audioManager?.lastPathname) {
+        pauseIfPlaying();
+        audioManager.lastPathname = currentPath;
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  } catch (err) {
+    console.warn('[AudioManager] No se pudo registrar listener de cambio de ruta:', err);
+  }
+}

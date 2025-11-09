@@ -1,11 +1,13 @@
 // src/modules/discover/DiscoverSingsWidget.tsx
 import React, { useEffect, useState } from 'react';
-import { IonList, IonItem, IonLabel, IonText, IonIcon } from '@ionic/react';
+import { IonList, IonItem, IonLabel, IonText, IonIcon, IonSpinner } from '@ionic/react';
 import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { listSings, type Sing } from '../../../core/db/dao/sings';
 import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
+import { useAudioLoading } from '../../../core/audio/useAudioLoading';
+import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
 
 type Props = {
   searchTerm?: string;
@@ -20,6 +22,8 @@ const SingCard: React.FC<{
   onToggle: (id: string, url: string) => void;
 }> = ({ sing, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
+  const isLoading = useAudioLoading(sing.id);
+  const isRepairing = useAudioRepairing(sing.id);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -34,11 +38,23 @@ const SingCard: React.FC<{
       onClick={() => onToggle(sing.id, sing.audio_url!)}
       style={{ '--padding-start': '16px' }}
     >
-      <IonIcon 
-        icon={isPlaying ? pause : play} 
-        slot="start"
-        style={{ fontSize: '24px', color: isPlaying ? '#3880ff' : '#666' }}
-      />
+      {isRepairing ? (
+        <div slot="start" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#f59e0b' }}>
+          <IonSpinner style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+          <span>Reparando…</span>
+        </div>
+      ) : isLoading ? (
+        <IonSpinner 
+          slot="start"
+          style={{ width: '24px', height: '24px' }}
+        />
+      ) : (
+        <IonIcon 
+          icon={isPlaying ? pause : play} 
+          slot="start"
+          style={{ fontSize: '24px', color: isPlaying ? '#3880ff' : '#666' }}
+        />
+      )}
       
       <IonLabel>
         <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>

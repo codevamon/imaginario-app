@@ -7,6 +7,7 @@ import { listTracks, type Track } from '../../../core/db/dao/tracks';
 import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
+import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
 
 type Props = {
   searchTerm?: string;
@@ -23,6 +24,7 @@ const TrackCard: React.FC<{
 }> = ({ track, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
   const isLoading = useAudioLoading(track.id);
+  const isRepairing = useAudioRepairing(track.id);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -37,7 +39,12 @@ const TrackCard: React.FC<{
       onClick={() => onToggle(track.id, track.audio_url!)}
       style={{ '--padding-start': '16px' }}
     >
-      {isLoading ? (
+      {isRepairing ? (
+        <div slot="start" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#f59e0b' }}>
+          <IonSpinner style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+          <span>Reparando…</span>
+        </div>
+      ) : isLoading ? (
         <IonSpinner 
           slot="start"
           style={{ width: '24px', height: '24px' }}

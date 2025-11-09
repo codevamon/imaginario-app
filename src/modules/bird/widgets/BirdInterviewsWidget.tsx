@@ -1,10 +1,12 @@
 // src/modules/bird/widgets/BirdInterviewsWidget.tsx
 import React, { useEffect, useState } from 'react';
-import { IonIcon, IonItem, IonLabel, IonList } from '@ionic/react';
+import { IonIcon, IonItem, IonLabel, IonList, IonSpinner } from '@ionic/react';
 import { play, pause } from 'ionicons/icons';
 import type { Interview } from '../../../core/db/dao/interviews';
 import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
+import { useAudioLoading } from '../../../core/audio/useAudioLoading';
+import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
 
 type Props = { 
   items: Interview[];
@@ -18,6 +20,8 @@ interface InterviewCardProps {
 
 const InterviewCard: React.FC<InterviewCardProps> = ({ interview, isPlaying, onToggle }) => {
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
+  const isLoading = useAudioLoading(interview.id);
+  const isRepairing = useAudioRepairing(interview.id);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -41,10 +45,19 @@ const InterviewCard: React.FC<InterviewCardProps> = ({ interview, isPlaying, onT
           onToggle(interview.id, interview.audio_url!);
         }}
       >
-        <IonIcon
-          icon={isPlaying ? pause : play}
-          className={`track-icon ${isPlaying ? 'playing' : ''}`}
-        />
+        {isRepairing ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#f59e0b' }}>
+            <IonSpinner style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+            <span>Reparando…</span>
+          </div>
+        ) : isLoading ? (
+          <IonSpinner style={{ width: '24px', height: '24px' }} />
+        ) : (
+          <IonIcon
+            icon={isPlaying ? pause : play}
+            className={`track-icon ${isPlaying ? 'playing' : ''}`}
+          />
+        )}
       </button>
 
       <div className="track-card-info">
