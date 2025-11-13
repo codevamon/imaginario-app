@@ -804,26 +804,83 @@ export async function verifyAudioCacheWithProgress(
       const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
       const path = `imaginario/audio/${hashHex}.mp3`;
 
+      // Verificar si el archivo existe y tiene tamaño válido
       let fileExists = false;
       let fileSizeValid = false;
+      let isCorrupt = false;
 
-      // Verificar si el archivo existe y tiene tamaño válido
       try {
         const stat = await Filesystem.stat({ path, directory: Directory.Data });
-        if (stat?.size && stat.size > 100 * 1024) {
+        
+        if (stat?.size) {
           fileExists = true;
-          fileSizeValid = true;
-          completed++;
-          checked++;
-          console.log(`[VerifyAudio] ✅ Audio completo: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
-          notifyProgress();
-          continue;
+          
+          // 🔍 Verificación de integridad binaria
+          // 1️⃣ Verificar tamaño mínimo (>10 KB)
+          if (stat.size < 10 * 1024) {
+            console.warn('[VerifyAudio] ⚠️ Archivo sospechoso (demasiado pequeño):', stat.size, 'bytes');
+            isCorrupt = true;
+          } else {
+            // 2️⃣ Leer primeros bytes para comprobar encabezado MP3
+            try {
+              const fileData = await Filesystem.readFile({
+                path,
+                directory: Directory.Data
+              });
+
+              // Leer solo primeros bytes del Base64 (primeros 40 caracteres base64 ≈ 30 bytes)
+              const base64Data = typeof fileData.data === 'string' ? fileData.data : '';
+              if (base64Data) {
+                const firstBytes = atob(base64Data.slice(0, 40));
+                const header = firstBytes.substring(0, 3);
+
+                const startsWithID3 = header === 'ID3';
+                const startsWithFFFB = firstBytes.charCodeAt(0) === 0xff && firstBytes.charCodeAt(1) === 0xfb;
+
+                if (!startsWithID3 && !startsWithFFFB) {
+                  console.warn('[VerifyAudio] ⚠️ Encabezado inválido en', path);
+                  isCorrupt = true;
+                }
+              } else {
+                console.warn('[VerifyAudio] ⚠️ No se pudo leer datos del archivo:', path);
+                isCorrupt = true;
+              }
+            } catch (readErr) {
+              console.warn('[VerifyAudio] ⚠️ Error leyendo archivo', path, readErr);
+              isCorrupt = true;
+            }
+          }
+
+          // Si el archivo es corrupto, eliminarlo y marcarlo como faltante
+          if (isCorrupt) {
+            try {
+              await Filesystem.deleteFile({ path, directory: Directory.Data });
+              console.log('[VerifyAudio] 🗑️ Eliminado archivo corrupto:', path);
+            } catch (delErr) {
+              console.warn('[VerifyAudio] No se pudo eliminar el archivo corrupto:', delErr);
+            }
+            fileSizeValid = false;
+            console.warn(`[DebugVerify] Archivo corrupto detectado: ${path} (tamaño: ${stat.size} bytes)`);
+            console.warn(`[VerifyAudio] ⚠️ Audio corrupto: ${url} (${stat.size} bytes)`);
+          } else if (stat.size > 100 * 1024) {
+            // Archivo válido y completo
+            fileSizeValid = true;
+            completed++;
+            checked++;
+            console.log(`[VerifyAudio] ✅ Audio completo: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
+            notifyProgress();
+            continue;
+          } else {
+            // Archivo existe pero es muy pequeño (incompleto)
+            fileSizeValid = false;
+            console.warn(`[DebugVerify] Archivo sospechoso o vacío: ${path} (tamaño: ${stat.size} bytes, mínimo requerido: ${100 * 1024} bytes)`);
+            console.warn(`[VerifyAudio] ⚠️ Audio incompleto: ${url} (${stat.size} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
+          }
         } else {
-          // Archivo existe pero es muy pequeño (incompleto) o vacío
+          // Archivo existe pero no tiene tamaño
           fileExists = true;
           fileSizeValid = false;
-          console.warn(`[DebugVerify] Archivo sospechoso o vacío: ${path} (tamaño: ${stat?.size || 0} bytes, mínimo requerido: ${100 * 1024} bytes)`);
-          console.warn(`[VerifyAudio] ⚠️ Audio incompleto: ${url} (${stat.size} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
+          isCorrupt = true;
         }
       } catch (statError) {
         // Archivo no existe

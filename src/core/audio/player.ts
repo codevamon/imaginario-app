@@ -603,6 +603,25 @@ class AudioManager {
           if (err.name === 'DOMException' || String(err).includes('DOMException')) {
             console.warn('[AudioManager] Archivo posiblemente dañado en resume, iniciando verificación...');
             
+            // Eliminar archivo corrupto si es local
+            if (this.audio?.src?.includes('_capacitor_file_') || this.audio?.src?.startsWith('capacitor://localhost/_capacitor_file_') || this.audio?.src?.startsWith('https://localhost/_capacitor_file_')) {
+              try {
+                let decodedPath = this.audio.src.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
+                decodedPath = decodeURIComponent(decodedPath);
+                const relativePath = decodedPath.indexOf('imaginario/') !== -1 
+                  ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
+                  : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
+                
+                await Filesystem.deleteFile({
+                  path: relativePath,
+                  directory: Directory.Data,
+                });
+                console.warn('[AudioManager] 🧹 Archivo corrupto eliminado en resume:', relativePath);
+              } catch (delErr) {
+                console.warn('[AudioManager] No se pudo eliminar archivo corrupto en resume:', delErr);
+              }
+            }
+            
             // Para resume, necesitamos obtener la URL original del track actual
             // Como no tenemos acceso directo a originalSrc aquí, solo logueamos el error
             console.warn('[AudioManager] ⚠️ No se puede reparar automáticamente en resume sin URL original');
@@ -636,7 +655,51 @@ class AudioManager {
 
     // crear o reutilizar audio element
     this.audio = this.audio ?? document.createElement('audio');
-    this.audio.src = normalizedSrc;
+    const finalSrc = normalizedSrc.startsWith('http') ? normalizedSrc : Capacitor.convertFileSrc(normalizedSrc);
+    
+    // --- Verificación de archivo local corrupto antes de reproducir ---
+    if (finalSrc.includes('_capacitor_file_') || finalSrc.startsWith('capacitor://localhost/_capacitor_file_') || finalSrc.startsWith('https://localhost/_capacitor_file_')) {
+      try {
+        // Extraer el path relativo del URI
+        let relativePath = finalSrc.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
+        relativePath = decodeURIComponent(relativePath);
+        
+        // Si el path contiene 'imaginario/', extraer solo esa parte
+        const imaginarioIndex = relativePath.indexOf('imaginario/');
+        if (imaginarioIndex !== -1) {
+          relativePath = relativePath.substring(imaginarioIndex);
+        } else {
+          // Si no tiene 'imaginario/', intentar extraer desde el nombre del archivo
+          const fileName = finalSrc.split('/').pop() || '';
+          relativePath = `imaginario/audio/${decodeURIComponent(fileName)}`;
+        }
+        
+        const stat = await Filesystem.stat({
+          path: relativePath,
+          directory: Directory.Data,
+        });
+
+        if (stat.size < 10240) { // menos de 10 KB = posible corrupción
+          console.warn(`[AudioManager] ⚠️ Archivo corrupto detectado (${stat.size} bytes). Eliminando:`, relativePath);
+          await Filesystem.deleteFile({
+            path: relativePath,
+            directory: Directory.Data,
+          });
+          throw new Error('Archivo corrupto eliminado antes de reproducir');
+        }
+      } catch (verErr) {
+        if (verErr instanceof Error && verErr.message === 'Archivo corrupto eliminado antes de reproducir') {
+          // Archivo corrupto eliminado, continuar sin reproducir
+          this.setLoading(null);
+          this.setPlaying(null);
+          return;
+        }
+        console.warn('[AudioManager] Verificación de archivo local falló:', verErr);
+      }
+    }
+    // --- Fin verificación ---
+    
+    this.audio.src = finalSrc;
     this.audio.preload = 'auto';
     
     // Exponer el elemento global para acceso desde hooks
@@ -665,8 +728,28 @@ class AudioManager {
       this.setPlaying(null);
     };
     
-    this.audio.onerror = (e) => {
+    this.audio.onerror = async (e) => {
       console.warn('[AudioManager] audio error:', e, 'for src:', normalizedSrc);
+      
+      // Si el audio local falla en reproducirse, se elimina para reparación futura
+      if (this.audio?.src?.includes('_capacitor_file_') || this.audio?.src?.startsWith('capacitor://localhost/_capacitor_file_') || this.audio?.src?.startsWith('https://localhost/_capacitor_file_')) {
+        try {
+          let decodedPath = this.audio.src.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
+          decodedPath = decodeURIComponent(decodedPath);
+          const relativePath = decodedPath.indexOf('imaginario/') !== -1 
+            ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
+            : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
+          
+          await Filesystem.deleteFile({
+            path: relativePath,
+            directory: Directory.Data,
+          });
+          console.warn('[AudioManager] 🧹 Archivo local eliminado por error de reproducción:', relativePath);
+        } catch (delErr) {
+          console.warn('[AudioManager] No se pudo eliminar archivo corrupto:', delErr);
+        }
+      }
+      
       if (this.progressTimer) {
         clearInterval(this.progressTimer);
         this.progressTimer = null;
@@ -682,76 +765,103 @@ class AudioManager {
     // Esperar a que el audio esté listo (canplaythrough) para evitar DOMException en Android WebView
     try {
       await this.waitForAudioReady(this.audio);
-      console.log('[AudioManager] 🔁 Intentando reproducir tras canplaythrough');
-      
-      try {
-        await this.audio.play();
-        console.log('[AudioManager] ▶️ Reproducción iniciada correctamente');
-        this.setPlaying(id);
-        this.setLoading(null); // Finalizar loading cuando comienza a reproducir
-        console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
-      } catch (err: any) {
-        console.warn('[AudioManager] ⚠️ Error de reproducción:', err);
+      const playPromise = this.audio.play();
+      if (playPromise !== undefined) {
+        try {
+          await playPromise;
+        } catch (err) {
+          // Si es un error simple de reproducción, hacer reintento rápido
+          if (!(err instanceof DOMException)) {
+            console.warn('[AudioManager] Reintento de reproducción fallida:', err);
+            setTimeout(() => this.audio?.play().catch(() => {}), 300);
+            return;
+          }
+          // Si es DOMException, propagar al catch externo para reparación
+          throw err;
+        }
+      }
+      console.log('[AudioManager] ▶️ Reproducción iniciada correctamente');
+      this.setPlaying(id);
+      this.setLoading(null); // Finalizar loading cuando comienza a reproducir
+      console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
+    } catch (err: any) {
+      console.warn('[AudioManager] ⚠️ Error de reproducción:', err);
 
-        // Detectar error DOMException típico de archivo corrupto
-        if (err.name === 'DOMException' || String(err).includes('DOMException')) {
-          console.warn('[AudioManager] Archivo posiblemente dañado, iniciando verificación...');
+      // Detectar error DOMException típico de archivo corrupto
+      if (err.name === 'DOMException' || String(err).includes('DOMException')) {
+        console.warn('[AudioManager] Archivo posiblemente dañado, iniciando verificación...');
 
-          try {
-            const networkStatus = await Network.getStatus();
-            if (networkStatus.connected) {
-              console.log('[AudioManager] 🌐 En línea, re-descargando archivo...');
-              this.setRepairing(id); // Indicar que se está reparando
-              this.setLoading(id); // Mantener loading activo
+        try {
+          // Eliminar archivo corrupto si es local antes de re-descargar
+          if (this.audio?.src?.includes('_capacitor_file_') || this.audio?.src?.startsWith('capacitor://localhost/_capacitor_file_') || this.audio?.src?.startsWith('https://localhost/_capacitor_file_')) {
+            try {
+              let decodedPath = this.audio.src.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
+              decodedPath = decodeURIComponent(decodedPath);
+              const relativePath = decodedPath.indexOf('imaginario/') !== -1 
+                ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
+                : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
               
-              const downloadUrl = originalSrc;
-              const hash = await getAudioHash(downloadUrl);
-              await reDownloadAudio(downloadUrl, hash);
-              console.log('[AudioManager] ✅ Re-descarga completada, reintentando reproducción...');
-              
-              // Obtener nueva URL segura después de la re-descarga
-              const newPath = await getSafeAudioUrl(`imaginario/audio/${hash}.mp3`);
-              this.audio.src = newPath;
-              this.audio.load();
-              
-              // Esperar un momento antes de reintentar
-              await new Promise((r) => setTimeout(r, 500));
-              
-              // Esperar a que el audio esté listo nuevamente
-              await this.waitForAudioReady(this.audio);
-              await this.audio.play();
-              
-              console.log('[AudioManager] ✅ Reproducción exitosa tras reparación');
-              
-              // Revalidar el audio en el estado de verificación para actualizar el contador del navbar
-              await revalidateAudio(`imaginario/audio/${hash}.mp3`);
-              
-              this.setRepairing(null); // Finalizar reparación
-              this.setPlaying(id);
-              this.setLoading(null);
-            } else {
-              console.warn('[AudioManager] ❌ Sin conexión, no se puede reparar archivo corrupto');
-              this.setRepairing(null);
-              this.setPlaying(null);
-              this.setLoading(null);
+              await Filesystem.deleteFile({
+                path: relativePath,
+                directory: Directory.Data,
+              });
+              console.warn('[AudioManager] 🧹 Archivo corrupto eliminado antes de re-descarga:', relativePath);
+            } catch (delErr) {
+              console.warn('[AudioManager] No se pudo eliminar archivo corrupto antes de re-descarga:', delErr);
             }
-          } catch (repairErr) {
-            console.error('[AudioManager] 🚫 Fallo en la reparación automática:', repairErr);
+          }
+          
+          const networkStatus = await Network.getStatus();
+          if (networkStatus.connected) {
+            console.log('[AudioManager] 🌐 En línea, re-descargando archivo...');
+            this.setRepairing(id); // Indicar que se está reparando
+            this.setLoading(id); // Mantener loading activo
+            
+            const downloadUrl = originalSrc;
+            const hash = await getAudioHash(downloadUrl);
+            await reDownloadAudio(downloadUrl, hash);
+            console.log('[AudioManager] ✅ Re-descarga completada, reintentando reproducción...');
+            
+            // Obtener nueva URL segura después de la re-descarga
+            const newPath = await getSafeAudioUrl(`imaginario/audio/${hash}.mp3`);
+            const finalNewPath = newPath.startsWith('http') ? newPath : Capacitor.convertFileSrc(newPath);
+            this.audio.src = finalNewPath;
+            this.audio.load();
+            
+            // Esperar un momento antes de reintentar
+            await new Promise((r) => setTimeout(r, 500));
+            
+            // Esperar a que el audio esté listo nuevamente
+            await this.waitForAudioReady(this.audio);
+            await this.audio.play();
+            
+            console.log('[AudioManager] ✅ Reproducción exitosa tras reparación');
+            
+            // Revalidar el audio en el estado de verificación para actualizar el contador del navbar
+            await revalidateAudio(`imaginario/audio/${hash}.mp3`);
+            
+            this.setRepairing(null); // Finalizar reparación
+            this.setPlaying(id);
+            this.setLoading(null);
+          } else {
+            console.warn('[AudioManager] ❌ Sin conexión, no se puede reparar archivo corrupto');
             this.setRepairing(null);
             this.setPlaying(null);
             this.setLoading(null);
           }
-        } else {
-          console.error('[AudioManager] Reproducción falló por otra causa:', err);
+        } catch (repairErr) {
+          console.error('[AudioManager] 🚫 Fallo en la reparación automática:', repairErr);
           this.setRepairing(null);
           this.setPlaying(null);
           this.setLoading(null);
         }
+      } else {
+        // Si el error no es DOMException, puede ser de waitForAudioReady
+        console.warn('[AudioManager] Audio aún no listo, reintentando...', err);
+        setTimeout(() => {
+          this.audio?.play().catch(() => {});
+        }, 500);
       }
-    } catch (e) {
-      console.warn('[AudioManager] waitForAudioReady failed:', e, 'for src:', normalizedSrc);
-      this.setPlaying(null);
-      this.setLoading(null); // Finalizar loading en caso de error
     }
   }
 
@@ -879,31 +989,27 @@ class AudioManager {
    * Espera a que el audio esté listo para reproducir (canplaythrough) antes de intentar play()
    * Evita DOMException por carga incompleta en WebView Android
    */
-  private async waitForAudioReady(audio: HTMLAudioElement): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        console.warn('[AudioManager] ⏰ Timeout esperando canplaythrough');
-        resolve();
-      }, 4000); // máximo 4 segundos
-
+  private waitForAudioReady(audio: HTMLAudioElement): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (audio.readyState >= 2) return resolve(); // suficiente para reproducir
+      
       const onReady = () => {
-        clearTimeout(timeout);
-        console.log('[AudioManager] ✅ canplaythrough detectado');
         audio.removeEventListener('canplaythrough', onReady);
         audio.removeEventListener('error', onError);
         resolve();
       };
 
-      const onError = (e: Event) => {
-        clearTimeout(timeout);
-        console.warn('[AudioManager] ⚠️ Error en carga de audio:', e);
+      const onError = (err: any) => {
         audio.removeEventListener('canplaythrough', onReady);
         audio.removeEventListener('error', onError);
-        reject(e);
+        reject(err);
       };
 
       audio.addEventListener('canplaythrough', onReady, { once: true });
       audio.addEventListener('error', onError, { once: true });
+      
+      // timeout de seguridad
+      setTimeout(() => resolve(), 2000);
     });
   }
 }
