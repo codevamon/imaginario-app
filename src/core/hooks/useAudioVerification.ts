@@ -264,26 +264,27 @@ export function useAudioVerification() {
     }
   }, [presentToast, totalRepairs]);
 
-  // Ejecutar reparación automática cuando hay conexión
-  useEffect(() => {
-    let listenerHandle: PluginListenerHandle | null = null;
+  // DESACTIVADO: Reparación automática cuando hay conexión
+  // La reparación ahora solo se ejecuta manualmente desde la UI (ej. Sync Center)
+  // useEffect(() => {
+  //   let listenerHandle: PluginListenerHandle | null = null;
 
-    (async () => {
-      listenerHandle = await Network.addListener('networkStatusChange', async (status) => {
-        if (status.connected && !repairing) {
-          await repairMissing();
-        }
-      });
-    })();
+  //   (async () => {
+  //     listenerHandle = await Network.addListener('networkStatusChange', async (status) => {
+  //       if (status.connected && !repairing) {
+  //         await repairMissing();
+  //       }
+  //     });
+  //   })();
 
-    return () => {
-      (async () => {
-        if (listenerHandle) {
-          await listenerHandle.remove();
-        }
-      })();
-    };
-  }, [repairing, repairMissing]);
+  //   return () => {
+  //     (async () => {
+  //       if (listenerHandle) {
+  //         await listenerHandle.remove();
+  //       }
+  //     })();
+  //   };
+  // }, [repairing, repairMissing]);
 
   const startVerification = useCallback(async () => {
     if (verificationState.running) return;
