@@ -66,7 +66,6 @@ export async function getAllTracks(): Promise<Track[]> {
       SELECT * FROM tracks
       WHERE deleted_at IS NULL
       ORDER BY updated_at DESC
-      LIMIT 20
     `);
     
     const tracks: Track[] = (result.values || []).map((row: any) => ({

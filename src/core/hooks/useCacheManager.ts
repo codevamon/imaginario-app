@@ -132,6 +132,16 @@ export function useCacheManager() {
 
       images.forEach(img => img.url && allUrls.push({ url: img.url, type: 'image' }));
 
+      console.log('[CacheManager] 🟢 tracks totales:', tracks.length);
+
+      console.log('[CacheManager] 🟢 sings totales:', sings.length);
+
+      console.log('[CacheManager] 🟢 interviews totales:', interviews.length);
+
+      console.log('[CacheManager] 🟢 images totales:', images.length);
+
+      console.log('[CacheManager] 🧮 total URLs a procesar:', allUrls.length);
+
 
 
       const total = allUrls.length;

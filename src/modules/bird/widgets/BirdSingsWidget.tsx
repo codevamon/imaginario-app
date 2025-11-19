@@ -2,6 +2,7 @@
 import React from 'react';
 import SingsWidget from '../../home/widgets/SingsWidget';
 import type { Sing } from '../../../core/db/dao/sings';
+import { audioManager } from '../../../core/audio/player';
 
 type Props = { 
   items: Sing[];
@@ -21,7 +22,12 @@ const BirdSingsWidget: React.FC<Props> = ({ items }) => {
       <SingsWidget 
         items={items} 
         title="" 
-        onItemClick={undefined} 
+        onItemClick={(id: string) => {
+          const sing = items.find(s => s.id === id);
+          if (sing?.audio_url) {
+            audioManager.toggle(id, sing.audio_url);
+          }
+        }} 
       />
     </div>
   );

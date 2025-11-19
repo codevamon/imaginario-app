@@ -16,7 +16,7 @@ type Props = {
 interface InterviewCardProps {
   interview: Interview;
   isPlaying: boolean;
-  onToggle: (id: string, url: string) => void;
+  onToggle: (id: string, url?: string) => void;
 }
 
 const InterviewCard: React.FC<InterviewCardProps> = ({ interview, isPlaying, onToggle }) => {
@@ -106,8 +106,12 @@ const BirdInterviewsWidget: React.FC<Props> = ({ items }) => {
     return unsub;
   }, []);
 
-  const handlePlayInterview = (interviewId: string, url: string) => {
-    audioManager.toggle(interviewId, url);
+  const handlePlayInterview = (interviewId: string, url?: string) => {
+    const interview = items.find(i => i.id === interviewId);
+    const resolvedUrl = url || interview?.audio_url;
+    if (resolvedUrl) {
+      audioManager.toggle(interviewId, resolvedUrl);
+    }
   };
 
   if (!items?.length) {

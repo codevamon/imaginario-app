@@ -139,6 +139,7 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+// ⚠️ Punto de IO: descarga de audio
 /**
  * Descarga un archivo de audio usando Filesystem.downloadFile nativo
  * (más eficiente que fetch + FileReader + base64)
@@ -162,7 +163,7 @@ async function downloadAudioNative(url: string, destPath: string): Promise<boole
   }
 
   try {
-    log('[downloadAudioNative] ⬇️ Descargando nativo:', url, '→', destPath);
+    log('[AudioCache] usando Filesystem.downloadFile para:', url, '→', destPath);
 
     const result = await Filesystem.downloadFile({
       url,
@@ -195,69 +196,106 @@ async function downloadAudioNative(url: string, destPath: string): Promise<boole
   }
 }
 
-// ✅ Descarga robusta: mkdir padre + write base64 + verificación de bytes
-async function downloadTo(path: string, url: string): Promise<boolean> {
-  try {
-    log('[downloadTo] Iniciando descarga:', url, '→', path);
+// ⚠️ Punto de IO: descarga de imagen
+/**
+ * Descarga una imagen usando Filesystem.downloadFile nativo
+ * (evita OutOfMemory al no pasar datos grandes por el bridge de Capacitor)
+ */
+async function downloadImageStreaming(path: string, url: string): Promise<boolean> {
+  if (!url || !/^https?:\/\//i.test(url)) {
+    log('[downloadImageStreaming] 🚫 URL inválida o vacía:', url);
+    return false;
+  }
 
-    if (!url || !/^https?:\/\//i.test(url)) {
-      log('[downloadTo] 🚫 URL inválida o vacía:', url);
-      return false;
-    }
-
-    const { Network } = await import('@capacitor/network');
-    const { connected } = await Network.getStatus();
-    if (!connected) {
-      log('[downloadTo] ⚠️ Sin conexión, se omite descarga de', url);
-      return false;
-    }
-
-    // Descarga HTTP
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`[downloadTo] HTTP ${resp.status} ${resp.statusText} → ${url}`);
-    const blob = await resp.blob();
-
-    // Blob → base64 (solo payload, sin "data:...;base64,")
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onloadend = () => {
-        const result = String(reader.result || '');
-        const payload = result.includes(',') ? result.split(',')[1] : result;
-        resolve(payload);
-      };
-      reader.readAsDataURL(blob);
-    });
-
-    // Asegurar carpeta padre
-    const parent = path.split('/').slice(0, -1).join('/');
-    if (parent) {
-      await Filesystem.mkdir({
-        path: parent,
-        directory: Directory.Data,
-        recursive: true,
-      }).catch(() => { /* ya existe */ });
-    }
-
-    // Escribir en Data con encoding base64
-    await Filesystem.writeFile({
-      path,
-      data: base64,
+  // Asegurar carpeta padre (por si no existe)
+  const parent = path.split('/').slice(0, -1).join('/');
+  if (parent) {
+    await Filesystem.mkdir({
+      path: parent,
       directory: Directory.Data,
       recursive: true,
+    }).catch(() => {
+      // carpeta ya existe
+    });
+  }
+
+  try {
+    log('[ImageCache] usando Filesystem.downloadFile para:', url, '→', path);
+
+    const result = await Filesystem.downloadFile({
+      url,
+      directory: Directory.Data,
+      path,
+      progress: false,
     });
 
-    // Verificación de bytes > 0
-    const stat = await Filesystem.stat({ path, directory: Directory.Data });
-    if (!stat || (stat.size ?? 0) <= 0) {
-      log('[downloadTo] ❌ Archivo con tamaño 0:', path);
+    // Verificar tamaño > 0
+    const stat = await Filesystem.stat({
+      path,
+      directory: Directory.Data,
+    });
+
+    if (!stat || !stat.size || stat.size <= 0) {
+      log('[downloadImageStreaming] ❌ Archivo con tamaño 0 después de downloadFile:', path);
+      return false;
+    }
+
+    log('[downloadImageStreaming] ✅ Archivo descargado:', path, 'bytes:', stat.size);
+    return true;
+  } catch (error) {
+    log('[downloadImageStreaming] ❌ Error descargando archivo', url, error);
+    return false;
+  }
+}
+
+// ⚠️ Punto de IO: descarga genérica (usada como fallback para audios)
+/**
+ * Descarga un archivo usando Filesystem.downloadFile nativo
+ * (evita OutOfMemory al no pasar datos grandes por el bridge de Capacitor)
+ */
+async function downloadTo(path: string, url: string): Promise<boolean> {
+  if (!url || !/^https?:\/\//i.test(url)) {
+    log('[downloadTo] 🚫 URL inválida o vacía:', url);
+    return false;
+  }
+
+  // Asegurar carpeta padre (por si no existe)
+  const parent = path.split('/').slice(0, -1).join('/');
+  if (parent) {
+    await Filesystem.mkdir({
+      path: parent,
+      directory: Directory.Data,
+      recursive: true,
+    }).catch(() => {
+      // carpeta ya existe
+    });
+  }
+
+  try {
+    log('[AudioCache] usando Filesystem.downloadFile para:', url, '→', path);
+
+    const result = await Filesystem.downloadFile({
+      url,
+      directory: Directory.Data,
+      path,
+      progress: false,
+    });
+
+    // Verificar tamaño > 0
+    const stat = await Filesystem.stat({
+      path,
+      directory: Directory.Data,
+    });
+
+    if (!stat || !stat.size || stat.size <= 0) {
+      log('[downloadTo] ❌ Archivo con tamaño 0 después de downloadFile:', path);
       return false;
     }
 
     log('[downloadTo] ✅ Archivo guardado en caché:', path, 'bytes:', stat.size);
     return true;
   } catch (error) {
-    log('[downloadTo] ❌ Error al descargar/guardar', url, error);
+    log('[downloadTo] ❌ Error descargando archivo', url, error);
     return false;
   }
 }
@@ -432,7 +470,7 @@ async function cacheImage(url?: string | null): Promise<string | undefined> {
     } catch {
       // El archivo no existe, descargarlo
       log('Imagen no encontrada en caché, descargando...');
-      await downloadTo(filePath, url);
+      await downloadImageStreaming(filePath, url);
       
       // Verificar límite después de descargar
       await enforceCacheLimit();
@@ -556,17 +594,12 @@ async function retryDownloadIfCorrupt(url: string, path: string): Promise<string
 
     console.log("[IMG-RETRY] Archivo corrupto, reintentando:", url);
 
-    // Intento 2: descargar de nuevo
-    const data = await fetch(url);
-    const blob = await data.blob();
-    const arrayBuffer = await blob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-    await Filesystem.writeFile({
-      path,
-      data: base64,
-      directory: Directory.Data,
-    });
+    // Intento 2: descargar de nuevo usando streaming
+    const ok = await downloadImageStreaming(path, url);
+    if (!ok) {
+      console.warn("[IMG-RETRY] Falló el reintento con streaming, usando la URL original.");
+      return url;
+    }
 
     const stat2 = await Filesystem.stat({ path, directory: Directory.Data });
     if (stat2.size && stat2.size > 0) {
@@ -607,7 +640,9 @@ export async function ensureCachedMedia(url?: string | null, type: 'audio' | 'im
     if (!existing) {
       // 🔹 Si estamos online → siempre usar la URL remota como fuente principal
       if (!isOffline) {
-        const ok = await downloadTo(relPath, url);
+        const ok = type === "image" 
+          ? await downloadImageStreaming(relPath, url)
+          : await downloadTo(relPath, url);
         // Si la descarga falla estando online → igual devolvemos la URL remota
         if (!ok) return url;
         
@@ -742,52 +777,38 @@ async function ensureAudioDir() {
   }
 }
 
+// ⚠️ Punto de IO: descarga de audio grande (usada en verifyAudioCache)
 /**
- * Descarga un archivo de audio por streaming (seguro para grandes tamaños)
- * con verificación final post-escritura.
+ * Descarga un archivo de audio usando Filesystem.downloadFile nativo
+ * (evita OutOfMemory incluso para archivos grandes >10MB)
  */
 async function downloadAudioStream(url: string, destPath: string): Promise<void> {
   await ensureAudioDir();
 
-  const response = await fetch(url);
-  if (!response.ok || !response.body) {
-    throw new Error(`[StreamSave] Respuesta inválida para ${url}`);
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      totalBytes += value.length;
-      if (totalBytes > 200 * 1024 * 1024) throw new Error('[StreamSave] Archivo demasiado grande (>200MB)');
-    }
-  }
-
-  const blob = new Blob(chunks as BlobPart[], { type: 'audio/mpeg' });
-  const base64Data = await blobToBase64(blob);
-  await Filesystem.writeFile({
-    path: destPath,
-    data: base64Data,
-    directory: Directory.Data,
-    encoding: 'base64' as Encoding,
-    recursive: true,
-  });
-
-  // 🔁 Verificación post-escritura
   try {
-    const stat = await Filesystem.stat({ path: destPath, directory: Directory.Data });
-    console.log(`[StreamSave] ✅ Guardado OK (${(stat.size / 1024 / 1024).toFixed(2)} MB) en ${destPath}`);
-  } catch {
-    console.error(`[StreamSave] ⚠️ No se pudo verificar escritura de ${destPath}`);
-  }
+    log('[AudioCache] usando Filesystem.downloadFile para archivo grande:', url, '→', destPath);
 
-  // 🧹 Aplicar límite global del caché
-  await enforceCacheLimit();
+    await Filesystem.downloadFile({
+      url,
+      directory: Directory.Data,
+      path: destPath,
+      progress: false,
+    });
+
+    // 🔁 Verificación post-escritura
+    try {
+      const stat = await Filesystem.stat({ path: destPath, directory: Directory.Data });
+      console.log(`[StreamSave] ✅ Guardado OK (${(stat.size / 1024 / 1024).toFixed(2)} MB) en ${destPath}`);
+    } catch {
+      console.error(`[StreamSave] ⚠️ No se pudo verificar escritura de ${destPath}`);
+    }
+
+    // 🧹 Aplicar límite global del caché
+    await enforceCacheLimit();
+  } catch (error) {
+    console.error(`[StreamSave] ❌ Error descargando archivo grande: ${url}`, error);
+    throw error;
+  }
 }
 
 /**
@@ -878,9 +899,15 @@ export async function verifyAudioCacheWithProgress(
     // Usar la conexión compartida de la base de datos
     const dbConn = await getDb();
 
-    const res = await dbConn.query('SELECT id, audio_url, updated_at FROM tracks WHERE deleted_at IS NULL');
-    const tracks = res.values || [];
-    total = tracks.length;
+    const res = await dbConn.query(`
+      SELECT id, audio_url, updated_at FROM tracks WHERE deleted_at IS NULL
+      UNION ALL
+      SELECT id, audio_url, updated_at FROM sings WHERE deleted_at IS NULL
+      UNION ALL
+      SELECT id, audio_url, updated_at FROM interviews WHERE deleted_at IS NULL
+    `);
+    const allAudios = res.values || [];
+    total = allAudios.length;
 
     const status = await Network.getStatus();
     const isOnline = status.connected;
@@ -890,8 +917,8 @@ export async function verifyAudioCacheWithProgress(
       onProgress?.({ total, checked, missing, downloading, completed });
     };
 
-    for (const track of tracks) {
-      const url = track.audio_url;
+    for (const audio of allAudios) {
+      const url = audio.audio_url;
       if (!url) {
         checked++;
         notifyProgress();

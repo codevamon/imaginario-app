@@ -207,7 +207,7 @@ async function prepareSource(originalSrc: string, id: string): Promise<string> {
   try {
     const { connected } = await Network.getStatus();
 
-    // Derivar hash único por URL
+    // Importante: el hash debe ser idéntico al de ensureCachedMedia (sha256(url) sin encodeURI)
     const hash = await sha256(originalSrc);
     const relPath = `imaginario/audio/${hash}.mp3`;
 

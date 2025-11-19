@@ -100,14 +100,33 @@ export async function getAllSings(): Promise<Sing[]> {
     return fakeSings;
   }
 
-  const db = await getDb();
-  const result = await db.query(`
-    SELECT * FROM sings
-    WHERE deleted_at IS NULL
-    ORDER BY updated_at DESC
-    LIMIT 20
-  `);
-  return result.values as Sing[];
+  try {
+    const db = await getDb();
+    const result = await db.query(`
+      SELECT * FROM sings
+      WHERE deleted_at IS NULL
+      ORDER BY updated_at DESC
+    `);
+    
+    const sings: Sing[] = (result.values || []).map((row: any) => ({
+      id: row.id,
+      bird_id: row.bird_id,
+      title: row.title,
+      audio_url: row.audio_url ?? null,
+      duration_ms: row.duration_ms,
+      updated_at: toIso(row.updated_at),
+      deleted_at: toIsoOrNull(row.deleted_at),
+      community: row.community,
+      instruments: row.instruments,
+      interpreters: row.interpreters,
+      author: row.author
+    }));
+    
+    return sings;
+  } catch (error) {
+    console.error('[DAO] getAllSings error:', error);
+    return [];
+  }
 }
 
 export async function listSings(options?: {

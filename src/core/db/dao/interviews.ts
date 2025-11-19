@@ -58,7 +58,6 @@ export async function getAllInterviews(): Promise<Interview[]> {
       SELECT * FROM interviews
       WHERE deleted_at IS NULL
       ORDER BY updated_at DESC
-      LIMIT 20
     `);
     
     const interviews: Interview[] = (result.values || []).map((row: any) => ({
