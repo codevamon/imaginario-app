@@ -14,6 +14,12 @@ import { getAllInterviews } from '../db/dao/interviews';
 
 import { getDb } from '../sqlite';
 
+import { ensureCachedImage } from "../cache/imageCacheService";
+
+import { listBirds } from "../db/dao/birds";
+
+import { getImagesByBirdId } from "../db/dao/bird_images";
+
 
 
 export function useCacheManager() {
@@ -151,6 +157,64 @@ export function useCacheManager() {
         const pct = Math.min(100, Math.round((completed / total) * 100));
 
         setProgress(pct);
+
+      }
+
+
+
+      /* ------------------------------------------
+
+         🔹 Fase nueva: descargar TODAS las imágenes
+
+      ------------------------------------------- */
+
+      try {
+
+        const birds = await listBirds();
+
+        console.log("[IMG-DL] → Descargando imágenes… Total aves:", birds.length);
+
+        for (const b of birds) {
+
+          console.log("[IMG-DL] Bird:", b.id, b.name);
+
+          if (b.image_url) {
+
+            console.log("[IMG-DL]   Principal:", b.image_url);
+
+            const cached = await ensureCachedImage(b.image_url);
+
+            console.log("[IMG-DL]   Guardada como:", cached);
+
+          }
+
+
+
+          const imgs = await getImagesByBirdId(b.id);
+
+          console.log("[IMG-DL]   Imágenes secundarias:", imgs.length);
+
+          for (const img of imgs) {
+
+            if (img.url) {
+
+              console.log("[IMG-DL]     →", img.url);
+
+              const cachedImg = await ensureCachedImage(img.url);
+
+              console.log("[IMG-DL]       Guardada como:", cachedImg);
+
+            }
+
+          }
+
+        }
+
+        console.log("[IMG-DL] ✔ Fase imágenes completada");
+
+      } catch (imgErr) {
+
+        console.warn("[CacheManager] Error descargando imágenes:", imgErr);
 
       }
 

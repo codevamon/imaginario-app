@@ -9,6 +9,7 @@ import {
   IonText,
 } from '@ionic/react';
 import { Network } from '@capacitor/network';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 import birdsLocal from '../../assets/imgs/birds-i.jpg';
 import headBird1 from '../../assets/imgs/head-bird-1.png';
 import headBird2 from '../../assets/imgs/head-bird-2.png';
@@ -16,6 +17,12 @@ import picAbout1 from '../../assets/imgs/pic-about-1.png';
 import './AboutPage.css';
 
 type Lang = 'es' | 'da';
+
+// Componentes wrapper para imágenes con useCachedImage
+const AboutImage: React.FC<{ remoteUrl: string; localAsset: string; isOnline: boolean; alt?: string; className?: string }> = ({ remoteUrl, localAsset, isOnline, alt, className }) => {
+  const imgSrc = useCachedImage(isOnline ? remoteUrl : localAsset);
+  return <img src={imgSrc} alt={alt} className={className} />;
+};
 
 const AboutPage: React.FC = () => {
   const [language, setLanguage] = useState<Lang>('es');
@@ -43,6 +50,12 @@ const AboutPage: React.FC = () => {
     };
   }, []);
 
+  const imgBirdsI = useCachedImage(
+    isOnline
+      ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/birds-i.jpg'
+      : birdsLocal
+  );
+
   return (
     <IonPage>
       <IonContent fullscreen>
@@ -50,11 +63,7 @@ const AboutPage: React.FC = () => {
         <div className="about-i">
           <div className="about-i-image">
             <img
-              src={
-                isOnline
-                  ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/birds-i.jpg'
-                  : birdsLocal
-              }
+              src={imgBirdsI}
               alt="About"
               className="about-i-image-img"
             />
@@ -92,12 +101,10 @@ const AboutPage: React.FC = () => {
                 </div>
                 <div className="about-section-2">
                   <div className="about-image">
-                    <img
-                      src={
-                        isOnline
-                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-1.png'
-                          : headBird1
-                      }
+                    <AboutImage
+                      remoteUrl="https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-1.png"
+                      localAsset={headBird1}
+                      isOnline={isOnline}
                       alt="About"
                     />
                   </div>
@@ -111,25 +118,21 @@ const AboutPage: React.FC = () => {
                     <h3 className="h1-i _mdm">Conocimiento ancestral y científico sobre la avifauna</h3>
                   </div>
                   <div className="about-image-1">
-                    <img
-                      src={
-                        isOnline
-                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/pic-about-1.png'
-                          : picAbout1
-                      }
+                    <AboutImage
+                      remoteUrl="https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/pic-about-1.png"
+                      localAsset={picAbout1}
+                      isOnline={isOnline}
                       alt="About"
                     />
                   </div>
                   <div className="about-text-2">
-                    <p className="p1-i _lgt">Esta aplicación es uno de los resultados de este proceso: una apuesta por enamorar a las nuevas generaciones de las aves que los rodean, y por mantener viva la música, la lengua  y el conocimiento biocultural de sus mayores hacia el futuro.</p>
+                    <p className="p1-i _lgt">Esta aplicación es uno de los resultados de este proceso: una apuesta por enamorar a las nuevas generaciones de las aves que los rodean, y por mantener viva la música, la lengua  y el conocimiento biocultural de sus mayores hacia el futuro.</p>
                   </div>
                   <div className="about-image-2">
-                    <img
-                      src={
-                        isOnline
-                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-2.png'
-                          : headBird2
-                      }
+                    <AboutImage
+                      remoteUrl="https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-2.png"
+                      localAsset={headBird2}
+                      isOnline={isOnline}
                       alt="About"
                     />
                   </div>
@@ -170,12 +173,10 @@ Iyaru igu Gonawindua nekʉkuazha nugame.
                 </div>
                 <div className="about-section-2">
                   <div className="about-image">
-                    <img
-                      src={
-                        isOnline
-                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-1.png'
-                          : headBird1
-                      }
+                    <AboutImage
+                      remoteUrl="https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-1.png"
+                      localAsset={headBird1}
+                      isOnline={isOnline}
                       alt="About"
                     />
                   </div>
@@ -193,12 +194,10 @@ nanazhingurra nʉname. </p>
                     <h3 className="h1-i _mdm">Ancestral yuga científico anaruka jizhana anokuna waninaka anarukua</h3>
                   </div>
                   <div className="about-image-1">
-                    <img
-                      src={
-                        isOnline
-                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/pic-about-1.png'
-                          : picAbout1
-                      }
+                    <AboutImage
+                      remoteUrl="https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/pic-about-1.png"
+                      localAsset={picAbout1}
+                      isOnline={isOnline}
                       alt="About"
                     />
                   </div>
@@ -209,12 +208,10 @@ nawinzhe guama kinki, washkanguazi ima zhamaiama agʉñi duma tuega, nawi asheku
 nawinzhimamandzinaga nekʉmasha awanaingui.  </p>
                   </div>
                   <div className="about-image-2">
-                    <img
-                      src={
-                        isOnline
-                          ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-2.png'
-                          : headBird2
-                      }
+                    <AboutImage
+                      remoteUrl="https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/head-bird-2.png"
+                      localAsset={headBird2}
+                      isOnline={isOnline}
                       alt="About"
                     />
                   </div>

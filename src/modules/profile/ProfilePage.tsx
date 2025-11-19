@@ -19,12 +19,19 @@ import { Preferences } from '@capacitor/preferences';
 import { useIonRouter } from '@ionic/react';
 import { getDb } from '../../core/sqlite';
 import { listBirds, type Bird } from '../../core/db/dao/birds';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 
 type FavoriteBird = {
   id: string;
   bird_id: string;
   updated_at: number;
   bird?: Bird;
+};
+
+// Componente wrapper para imagen de favorito con useCachedImage
+const FavoriteBirdImage: React.FC<{ url?: string | null; alt: string; style?: React.CSSProperties }> = ({ url, alt, style }) => {
+  const imgSrc = useCachedImage(url);
+  return <img src={imgSrc} alt={alt} style={style} />;
 };
 
 const ProfilePage: React.FC = () => {
@@ -217,8 +224,8 @@ const ProfilePage: React.FC = () => {
                 >
                   <IonThumbnail slot="start" style={{ width: '50px', height: '50px' }}>
                     {favorite.bird?.image_url ? (
-                      <img 
-                        src={favorite.bird.image_url} 
+                      <FavoriteBirdImage 
+                        url={favorite.bird.image_url} 
                         alt={favorite.bird.name}
                         style={{ 
                           width: '100%', 

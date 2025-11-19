@@ -547,6 +547,41 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
   return await lock;
 }
 
+// ✅ Helper para reintentar descarga de imágenes corruptas
+async function retryDownloadIfCorrupt(url: string, path: string): Promise<string> {
+  try {
+    // Verificar tamaño del archivo
+    const stat = await Filesystem.stat({ path, directory: Directory.Data });
+    if (stat.size && stat.size > 0) return path;
+
+    console.log("[IMG-RETRY] Archivo corrupto, reintentando:", url);
+
+    // Intento 2: descargar de nuevo
+    const data = await fetch(url);
+    const blob = await data.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+    await Filesystem.writeFile({
+      path,
+      data: base64,
+      directory: Directory.Data,
+    });
+
+    const stat2 = await Filesystem.stat({ path, directory: Directory.Data });
+    if (stat2.size && stat2.size > 0) {
+      console.log("[IMG-RETRY] Recuperada correctamente:", url);
+      return path;
+    }
+
+    console.warn("[IMG-RETRY] Falló el reintento, usando la URL original.");
+    return url; 
+  } catch (err) {
+    console.warn("[IMG-RETRY] Error inesperado:", err);
+    return url;
+  }
+}
+
 // ✅ Helper unificado para medios
 export async function ensureCachedMedia(url?: string | null, type: 'audio' | 'image' = 'audio'): Promise<string | undefined> {
   if (!url) {
@@ -560,20 +595,49 @@ export async function ensureCachedMedia(url?: string | null, type: 'audio' | 'im
 
     const hash = await sha256(url);
     const ext = type === 'image' ? '.jpg' : '.mp3';
+    
+    const { Network } = await import('@capacitor/network');
+    const net = await Network.getStatus();
+    const isOffline = !net.connected;
+    
     const relPath = `imaginario/${type === 'image' ? 'images' : 'audio'}/${hash}${ext}`;
 
     // ¿Ya existe?
     const existing = await Filesystem.stat({ path: relPath, directory: Directory.Data }).catch(() => null);
     if (!existing) {
-      // Descargar si hay red
-      const ok = await downloadTo(relPath, url);
-      if (!ok) {
-        log(`[ensureCachedMedia] ⚠️ No se pudo cachear ${type}, dejo URL original.`);
+      // 🔹 Si estamos online → siempre usar la URL remota como fuente principal
+      if (!isOffline) {
+        const ok = await downloadTo(relPath, url);
+        // Si la descarga falla estando online → igual devolvemos la URL remota
+        if (!ok) return url;
+        
+        // Para imágenes, verificar si está corrupta y reintentar
+        if (type === "image") {
+          const retryResult = await retryDownloadIfCorrupt(url, relPath);
+          if (retryResult === url) {
+            return url;
+          }
+          // Si retryResult es el path, continuar para obtener URI
+        } else {
+          return url;
+        }
+      } else {
+        // 🔹 Si estamos offline y NO existe archivo → NO devolver undefined
+        // Simplemente devolvemos la URL remota (fallback natural)
         return url;
       }
     }
 
     // Resolver URI nativa segura
+    // Verificar corrupción antes de obtener URI (solo para imágenes existentes)
+    if (type === "image") {
+      const retryResult = await retryDownloadIfCorrupt(url, relPath);
+      if (retryResult !== relPath) {
+        return url; // Archivo corrupto y no se pudo recuperar
+      }
+      // Archivo válido o recuperado, obtener URI
+    }
+    
     const uriRes = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
     const fileUri = uriRes?.uri?.startsWith('file://') ? uriRes.uri : `file://${uriRes?.uri}`;
     log(`[ensureCachedMedia] ▶️ URI local lista (${type}):`, fileUri);

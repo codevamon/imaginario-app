@@ -6,6 +6,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import './DiscoverBirdsWidget.css';
 import { listBirds, type Bird } from '../../../core/db/dao/birds';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 
 type Props = {
   searchTerm?: string;
@@ -13,6 +14,11 @@ type Props = {
   rarityFilter?: number;
   popularityFilter?: 'asc' | 'desc';
   viewMode?: 'list' | 'carousel';
+};
+
+const BirdImage: React.FC<{ url?: string | null; alt: string; className?: string; style?: React.CSSProperties }> = ({ url, alt, className, style }) => {
+  const imgSrc = useCachedImage(url);
+  return <img src={imgSrc} alt={alt} className={className} style={style} />;
 };
 
 const DiscoverBirdsWidget: React.FC<Props> = ({ 
@@ -98,8 +104,8 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
               <div 
                 className="discover-card-image-wrapper"
               >
-                <img
-                  src={bird.image_url || '/assets/default-bird.svg'}
+                <BirdImage
+                  url={bird.image_url}
                   alt={bird.name}
                   className="discover-card-image"
                   style={{
@@ -198,7 +204,7 @@ const DiscoverBirdsWidget: React.FC<Props> = ({
               onClick={() => handleBirdClick(bird.id)}
             >
               <div className="discover-bird-image" >
-                <img src={bird.image_url || '/assets/default-bird.svg'} alt={bird.name} />
+                <BirdImage url={bird.image_url} alt={bird.name} />
                   
               </div>
               

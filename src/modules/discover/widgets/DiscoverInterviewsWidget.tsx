@@ -8,6 +8,7 @@ import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 
 type Props = {
   searchTerm?: string;
@@ -24,6 +25,7 @@ const InterviewCard: React.FC<{
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
   const isLoading = useAudioLoading(interview.id);
   const isRepairing = useAudioRepairing(interview.id);
+  const imgSrc = useCachedImage((interview as any).image_url);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -56,6 +58,13 @@ const InterviewCard: React.FC<{
         />
       )}
       
+      {(interview as any).image_url && (
+        <img
+          src={imgSrc}
+          alt={interview.title || 'Entrevista'}
+          className="interview-image"
+        />
+      )}
       <IonLabel>
         <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>
           {interview.title || 'Entrevista sin título'}

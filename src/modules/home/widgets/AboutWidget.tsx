@@ -4,6 +4,22 @@ import { IonText } from '@ionic/react';
 import { Network } from '@capacitor/network';
 import birdsLocal from '../../../assets/imgs/birds-i.jpg';
 import './AboutWidget.css';
+import { useCachedImage } from "@/core/cache/useCachedImage";
+
+const AboutImage: React.FC<{ isOnline: boolean }> = ({ isOnline }) => {
+  const imageUrlVariable = isOnline
+    ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/birds-i.jpg'
+    : birdsLocal;
+  const imgSrc = useCachedImage(imageUrlVariable);
+  
+  return (
+    <img
+      src={imgSrc}
+      alt="Acerca del proyecto"
+      className="about-card-image"
+    />
+  );
+};
 
 const AboutWidget: React.FC = () => {
   const [isOnline, setIsOnline] = useState(true);
@@ -47,15 +63,7 @@ const AboutWidget: React.FC = () => {
       <div className="in-widget-content">
         <div className="about-card-i">
           <div className="about-card-image-wrapper">
-            <img
-              src={
-                isOnline
-                  ? 'https://fkqqpndpginvqmdqajvb.supabase.co/storage/v1/object/public/assets/homepage/birds-i.jpg'
-                  : birdsLocal
-              }
-              alt="Acerca del proyecto"
-              className="about-card-image"
-            />
+            <AboutImage isOnline={isOnline} />
           </div>
 
           <div className="about-card-body">

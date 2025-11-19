@@ -3,12 +3,26 @@ import React, { useEffect, useState } from 'react';
 import { IonList, IonItem, IonLabel, IonText } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
 import { listMusicians, type Musician } from '../../../core/db/dao/musicians';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 
 type Props = {
   searchTerm?: string;
   orderFilter?: 'name' | 'updated_at';
   rarityFilter?: number;
   popularityFilter?: 'asc' | 'desc';
+};
+
+const MusicianImage: React.FC<{ url?: string | null; alt: string }> = ({ url, alt }) => {
+  const imgSrc = useCachedImage(url);
+  if (!url) return null;
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      className="musician-image"
+      slot="start"
+    />
+  );
 };
 
 const DiscoverMusiciansWidget: React.FC<Props> = ({ 
@@ -105,6 +119,7 @@ const DiscoverMusiciansWidget: React.FC<Props> = ({
             onClick={() => handleMusicianClick(musician.id)}
             style={{ '--padding-start': '16px' }}
           >
+            <MusicianImage url={(musician as any).image_url} alt={musician.name} />
             <IonLabel>
               <h2 style={{ fontWeight: '600', marginBottom: '4px' }}>
                 {musician.name}

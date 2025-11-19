@@ -7,6 +7,7 @@ import { audioManager } from '../../../core/audio/player';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 
 type Props = { 
   items: Interview[];
@@ -22,6 +23,7 @@ const InterviewCard: React.FC<InterviewCardProps> = ({ interview, isPlaying, onT
   const { progress, currentTime, duration } = useAudioProgress(isPlaying);
   const isLoading = useAudioLoading(interview.id);
   const isRepairing = useAudioRepairing(interview.id);
+  const imgSrc = useCachedImage((interview as any).image_url);
 
   const formatTime = (sec?: number) => {
     if (!sec || isNaN(sec)) return '0:00';
@@ -59,6 +61,14 @@ const InterviewCard: React.FC<InterviewCardProps> = ({ interview, isPlaying, onT
           />
         )}
       </button>
+
+      {(interview as any).image_url && (
+        <img
+          src={imgSrc}
+          alt={interview.title || 'Entrevista'}
+          className="interview-image"
+        />
+      )}
 
       <div className="track-card-info">
         <div className="in-track-card-info">

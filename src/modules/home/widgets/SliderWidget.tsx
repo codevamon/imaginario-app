@@ -7,11 +7,17 @@ import 'swiper/css';
 import './SliderWidget.css';
 import type { Bird } from '../../../core/db/dao/birds';
 import { getImagesByBirdId } from '../../../core/db/dao/bird_images';
+import { useCachedImage } from "@/core/cache/useCachedImage";
 
 type Props = {
   items?: Bird[];
   title?: string;
   onItemClick?: (id: string) => void;
+};
+
+const BirdImage: React.FC<{ url?: string | null; alt: string; className: string }> = ({ url, alt, className }) => {
+  const imgSrc = useCachedImage(url);
+  return <img src={imgSrc} alt={alt} className={className} />;
 };
 
 const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick }) => {
@@ -78,8 +84,8 @@ const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick
                     className="slider-card"
                   >
                     <div className="slider-card-image-wrapper">
-                      <img
-                        src={bird.image_url || '/assets/default-bird.svg'}
+                      <BirdImage
+                        url={bird.image_url}
                         alt={bird.name}
                         className="slider-card-image"
                       />

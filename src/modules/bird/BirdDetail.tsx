@@ -38,6 +38,12 @@ import BirdInterviewsWidget from './widgets/BirdInterviewsWidget';
 import './widgets/bird-widgets.css';
 import AccordionI from '../../ui/AccordionI';
 import ArrowLeft from '../../assets/icons/ArrowLeft.svg';
+import { useCachedImage } from "@/core/cache/useCachedImage";
+
+const BirdImage: React.FC<{ url?: string | null; alt: string; className: string }> = ({ url, alt, className }) => {
+  const imgSrc = useCachedImage(url);
+  return <img src={imgSrc} alt={alt} className={className} />;
+};
 
 const BirdDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -93,6 +99,7 @@ const BirdDetail: React.FC = () => {
 
         const birdImages = await getImagesByBirdId(id);
         setImages(birdImages);
+        console.log("[DEBUG BirdDetail images]", birdImages);
 
         const birdSings = await getSingsByBirdId(id);
         setSings(birdSings);
@@ -213,8 +220,8 @@ const BirdDetail: React.FC = () => {
               >
                 {(images.length > 0 ? images : [{ id: 'fallback', url: bird.image_url || '/assets/default-bird.jpg', description: 'Imagen no disponible' }]).map((image) => (
                   <SwiperSlide key={image.id}>
-                    <img
-                      src={image.url}
+                    <BirdImage
+                      url={image.url}
                       alt={image.description || bird.name}
                       className="bird-image"
                     />
