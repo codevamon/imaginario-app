@@ -181,37 +181,31 @@ body.dark ._btn._1._light>._real svg path {
 .s1-i,
 .s1-i * {
   font-family: 'Graphik', sans-serif;
-  font-style: normal;
   line-height: 120%;
 }
 .h1-i,
 .h1-i * {
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
-  font-style: normal;
   line-height: 0.8;
 }
 .h2-i,
 .h2-i *{
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
-  font-style: normal;
   line-height: 0.8;
 }
 .h3-i,
 .h3-i * {
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
-  font-style: normal;
   line-height: 100%;
 }
 .h4-i,
 .h4-i * {
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
-  font-style: normal;
   line-height: 100%;
 }
 .h5-i,
 .h5-i * {
   font-family: 'Recoleta', system-ui, -apple-system, sans-serif;
-  font-style: normal;
   line-height: 110%;
   text-transform: uppercase;
 }

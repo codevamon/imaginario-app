@@ -8,6 +8,12 @@ import { App } from '@capacitor/app';
 import { mediaCacheService, ensureCachedMedia } from '../cache/mediaCacheService';
 import { revalidateAudio } from '../hooks/useAudioVerification';
 
+// 🔒 Previene autopause en el primer tap al entrar a una vista
+let allowAutoPause = true;
+
+// Marca el momento en que comenzó la última reproducción real
+let lastPlaybackStartedAt: number | null = null;
+
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
 type OnLoadingCb = (loadingId: string | null) => void;
@@ -594,6 +600,8 @@ class AudioManager {
         try {
           await this.audio.play();
           console.log('[AudioManager] ▶️ Reproducción iniciada correctamente (resume)');
+          // Registrar cuándo comenzó esta reproducción (para proteger los primeros ms)
+          lastPlaybackStartedAt = Date.now();
           this.setPlaying(id);
           console.log('[AudioManager] resumed track:', id);
         } catch (err: any) {
@@ -781,6 +789,8 @@ class AudioManager {
         }
       }
       console.log('[AudioManager] ▶️ Reproducción iniciada correctamente');
+      // Registrar cuándo comenzó esta reproducción (para proteger los primeros ms)
+      lastPlaybackStartedAt = Date.now();
       this.setPlaying(id);
       this.setLoading(null); // Finalizar loading cuando comienza a reproducir
       console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
@@ -1020,8 +1030,26 @@ export const audioManager = new AudioManager();
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const pauseIfPlaying = () => {
     try {
+      // ⛔ Ignorar autopause si ocurre demasiado cerca del inicio de la reproducción
+      if (lastPlaybackStartedAt) {
+        const elapsed = Date.now() - lastPlaybackStartedAt;
+        // Si el autopause llega en los primeros 600 ms, lo consideramos ruido del sistema
+        if (elapsed < 600) {
+          console.log(
+            "[AudioManager] ⏸️ Autopause ignorada (", 
+            elapsed, 
+            "ms después de iniciar reproducción)"
+          );
+          return;
+        }
+      }
       if (audioManager?.isPlaying && audioManager.isPlaying()) {
         console.log('[AudioManager] ⏸️ Pausa automática por cambio de vista.');
+        // ⛔ Evitar autopausa en el primer tap después de montar la vista
+        if (!allowAutoPause) {
+          console.log("[AudioManager] ⏸️ Ignorando autopause inicial (primer tap safe)");
+          return;
+        }
         audioManager.pause();
       }
     } catch (err) {
@@ -1029,19 +1057,46 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     }
   };
 
+  // 🕒 Autopause deshabilitado brevemente tras cargar vista
+  // NOTA: El lifecycle hook real (ionViewDidEnter) está en los componentes de Ionic.
+  // Este setTimeout se ejecuta al inicializar el módulo para proteger el primer tap,
+  // pero idealmente debería ejecutarse en ionViewDidEnter de cada página para mayor precisión.
+  const resetAutoPauseFlag = () => {
+    allowAutoPause = false;
+    setTimeout(() => {
+      allowAutoPause = true;
+    }, 250);
+  };
+
+  // Resetear flag al inicio ANTES de registrar listeners para proteger primer tap
+  resetAutoPauseFlag();
+
   // Cuando se cambia de pestaña o la app pasa a segundo plano
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) pauseIfPlaying();
+    // Ignorar visibilitychange mientras no esté permitido autopause
+    if (!allowAutoPause) {
+      console.log("[AudioManager] ⏸️ Ignorando visibilitychange inicial (primer tap safe)");
+      return;
+    }
+
+    // Solo pausar si realmente la app se fue a background
+    if (document.visibilityState === 'hidden') {
+      pauseIfPlaying();
+    }
   });
 
   // Cuando cambia la ruta interna de Ionic / React Router
-  window.addEventListener('ionRouteWillChange', pauseIfPlaying);
-  window.addEventListener('popstate', pauseIfPlaying);
   window.addEventListener('beforeunload', pauseIfPlaying);
 
   // 📱 Pausar audio cuando la app se va al background (modo nativo)
   try {
     App.addListener('pause', () => {
+      // Ignorar pausa nativa mientras está en primer tap safe
+      if (!allowAutoPause) {
+        console.log("[AudioManager] ⏸️ Ignorando App.pause inicial (primer tap safe)");
+        return;
+      }
+
       pauseIfPlaying();
     });
   } catch (err) {
@@ -1053,20 +1108,29 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     // Inicializar lastPathname
     audioManager.lastPathname = window.location.pathname;
 
+    // Cuando cambia la ruta interna de Ionic / React Router
     window.addEventListener('ionRouteWillChange', () => {
-      pauseIfPlaying();
+      pauseIfPlaying(); // Pausar primero si está reproduciendo
+      resetAutoPauseFlag(); // Luego resetear flag para proteger primer tap en nueva vista
     });
 
     // También cubrir navegación directa por React Router (push, back, forward)
     window.addEventListener('popstate', () => {
-      pauseIfPlaying();
+      pauseIfPlaying(); // Pausar primero si está reproduciendo
+      resetAutoPauseFlag(); // Luego resetear flag para proteger primer tap en nueva vista
     });
 
     // Monitor global de cambios de URL con MutationObserver (fallback en caso de router.push interno)
     const observer = new MutationObserver(() => {
       const currentPath = window.location.pathname;
       if (audioManager?.isPlaying() && currentPath !== audioManager?.lastPathname) {
-        pauseIfPlaying();
+        // ⛔ Evitar autopausa en el primer tap después de montar la vista
+        if (!allowAutoPause) {
+          console.log("[AudioManager] ⏸️ Ignorando cambio DOM inicial (primer tap safe)");
+          return;
+        }
+        pauseIfPlaying(); // Pausar primero si está reproduciendo
+        resetAutoPauseFlag(); // Luego resetear flag para proteger primer tap en nueva vista
         audioManager.lastPathname = currentPath;
       }
     });

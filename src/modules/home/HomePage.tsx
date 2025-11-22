@@ -192,17 +192,29 @@ export default function HomePage() {
       setFeatured((fWithImages || []).slice(0, 8));
       setPopular((pWithImages || []).slice(0, 8));
       
-      // Cargar tracks de muestra
-      const sampleTracks: Track[] = [];
+      // Cargar tracks de muestra — 3 aleatorios globales seguros
+      let sampleTracks: Track[] = [];
+
       try {
-        if (fWithImages.length > 0) {
-          const t = await getTracksByBirdId(fWithImages[0].id);
-          sampleTracks.push(...t);
-        }
+        // Escanear hasta los primeros 6 pájaros destacados para obtener variedad
+        const birdsToScan = fWithImages.slice(0, 6);
+
+        const results = await Promise.all(
+          birdsToScan.map(b => getTracksByBirdId(b.id))
+        );
+
+        const allTracks = results.flat().filter(Boolean);
+
+        // Si no hay tracks, cae a array vacío de forma segura
+        const randomized = allTracks.sort(() => Math.random() - 0.5);
+
+        sampleTracks = randomized.slice(0, 3); // máximo 3
+
       } catch (err) {
-        console.warn('[HomePage] no se pudieron traer tracks', err);
+        console.warn('[HomePage] Error cargando tracks globales:', err);
       }
-      setTracks(sampleTracks.slice(0, 3));
+
+      setTracks(sampleTracks);
       
       // Cargar sings de muestra
       try {
@@ -269,7 +281,7 @@ export default function HomePage() {
             <SliderWidget items={featured} title="Guía de Aves" onItemClick={(id: string) => router.push(`/bird/${id}`)} />
             <SingsWidget
               items={sings}
-              title="Explora los cantos"
+              title="Explora los sonidos"
               onItemClick={(id: string) => console.log('play sing', id)}
             />
             <TracksWidget

@@ -21,7 +21,7 @@
 }
 
 .bird-accordions .accordion-i:first-of-type .accordion-header-i .accordion-header-i-content{
-  border-top: 0.1vw solid #E0E0E0;
+  border-top: 1px solid #E0E0E0;
 }
 .bird-accordions .accordion-i:last-child .accordion-header-i .accordion-header-i-content{
   border-bottom: none;
@@ -30,7 +30,7 @@
   display: flex;
   justify-content: space-between;
   width: 100%;
-  border-bottom: 0.1vw solid #E0E0E0;
+  border-bottom: 1px solid #E0E0E0;
   padding: 5vw 0;
 }
 .accordion-content-i {

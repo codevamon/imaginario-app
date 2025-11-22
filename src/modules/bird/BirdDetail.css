@@ -113,7 +113,23 @@
 .swiper-pagination-bullet-active {
   background: var(--ion-color-primary);
 }
+.swiper-backface-hidden .swiper-slide {
+  height: 350px;
+  max-height: 350px;
+}
 
+.swiper-backface-hidden .swiper-slide img {
+  max-height: 100%;
+  max-width: 100%;
+}
+
+.swiper-pagination.swiper-pagination-clickable.swiper-pagination-bullets.swiper-pagination-horizontal.swiper-pagination-lock .swiper-pagination-bullet {
+  width: 2vw;
+  height: 2vw;
+  background: #cbcbcbcf;
+  display: block !important;
+  opacity: 1;
+}
 /* ==========================
    BOTÓN VOLVER
    ========================== */

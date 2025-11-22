@@ -127,8 +127,8 @@ const MusicPage: React.FC = () => {
       <IonContent>
         <section className="music-search-widget-i">
           <SearchWidget
-              title="Explora los cantos"
-              subtitle="Escucha e identifica las aves con melodías, cantos e instrumentos"
+              title="Explora los sonidos"
+              subtitle="Escucha e identifica las aves con melodías, sonidos e instrumentos"
               searchTerm={searchTerm}
               onSearchChange={handleSearchChange}
               onSubmitSearch={handleSubmitSearch}

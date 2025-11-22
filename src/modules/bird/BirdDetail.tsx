@@ -236,7 +236,7 @@ const BirdDetail: React.FC = () => {
             <div className="bird-content-header">
               <div className="in-header">
                 <h1 className="h2-i _rgl">{bird.name}</h1>
-                <p className="h4-i _rgl">{bird.scientific_name}</p>
+                <p className="h4-i _rgl _italic">{bird.scientific_name}</p>
               </div>
             </div>
             <div className="bird-content-details">
@@ -313,7 +313,7 @@ const BirdDetail: React.FC = () => {
           </AccordionI>
 
           {/* Cantos */}
-          <AccordionI title="Cantos">
+          <AccordionI title="Sonidos">
             <BirdSingsWidget items={sings} />
           </AccordionI>
 
