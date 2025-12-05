@@ -63,7 +63,7 @@ const InterviewsWidget: React.FC<Props> = ({ items, title = "" }) => {
 
               <div className="track-card-info">
                 <div className="in-track-card-info">
-                  <div className="track-card-title">
+                  <div className="track-card-title h3-i _mdm primary-i">
                     {interview.title || "Entrevista"}
                   </div>
                 </div>

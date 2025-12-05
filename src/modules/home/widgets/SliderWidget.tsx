@@ -95,7 +95,7 @@ const SliderWidget: React.FC<Props> = ({ items = [], title = 'Aves', onItemClick
                       <div className="in-slide">
                         <div className="h3-i _rgl _capitalize whites">{bird.name}</div>
                         {bird.scientific_name && (
-                          <div className="h4-i _lgt whites">{bird.scientific_name}</div>
+                          <div className="h4-i _lgt whites _italic">{bird.scientific_name}</div>
                         )}
                       </div>
                     </div>

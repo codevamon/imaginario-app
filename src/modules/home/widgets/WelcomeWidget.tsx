@@ -44,7 +44,7 @@ const WelcomeWidget: React.FC = () => {
   return (
     <section className="widget-welcome-i ">
       <div className="in-widget">
-        <h1 className="h1-i _rgl primary-i">Bienvenidos</h1>
+        <h1 className="h1-i _rgl primary-i">Bienvenidos: Zungui</h1>
         <p className="p1-ii _rgl primary-i">Explora la diversidad de aves de la Sierra</p>
       </div>
 

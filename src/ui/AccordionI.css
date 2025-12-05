@@ -59,6 +59,8 @@
   z-index: 3;
   top: 10vw;
   left: 3vw;
+  width:4rem;
+  height:4rem;
 }
 .swiper-pagination.swiper-pagination-clickable.swiper-pagination-bullets.swiper-pagination-horizontal.swiper-pagination-lock {
   bottom: 14vw;
