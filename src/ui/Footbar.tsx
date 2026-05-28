@@ -105,6 +105,16 @@ const Footbar: React.FC = () => {
         </div>
 
         <div 
+          className={`item-monitor footbar-item ${isActive('/synccenter') ? 'active' : ''}`} 
+          onClick={() => router.push('/synccenter')}
+        >
+          <span className="icon">
+            <IonIcon icon={downloadOutline} />
+          </span>
+          <span className="l2-i">Monitor</span>
+        </div>
+
+        <div 
           className={`item-about footbar-item ${isActive('/about') ? 'active' : ''}`} 
           onClick={() => router.push('/about')}
         >

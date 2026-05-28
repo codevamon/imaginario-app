@@ -21,6 +21,7 @@ const BirdTracksWidget: React.FC<Props> = ({ items }) => {
       <TracksWidget 
         items={items} 
         title="" 
+        limit={null}
         onItemClick={undefined} 
       />
     </div>

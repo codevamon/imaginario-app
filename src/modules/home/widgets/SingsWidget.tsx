@@ -75,7 +75,7 @@ const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
         <div className="in-track-card-info">
           <div className="track-card-title h3-i _mdm primary-i">{sing.title || 'Canto sin título'}</div>
           {sing.author && (
-            <div className="track-card-subtitle h4-i _lgt primary-i">{sing.author}</div>
+            <div className="track-card-subtitle h4-i _lgt primary-i _italic">{sing.author}</div>
           )}
           {/* <div className="l2-i p2-i _rgl primary-i">
             {[

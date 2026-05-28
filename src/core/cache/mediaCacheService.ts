@@ -1,6 +1,9 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Network } from '@capacitor/network';
 import { getDb } from '../sqlite';
+import { getAllSings, type Sing } from '../db/dao/sings';
+import { getAllTracks, type Track } from '../db/dao/tracks';
+import { getAllInterviews, type Interview } from '../db/dao/interviews';
 
 const DEBUG = import.meta.env.VITE_DEBUG_CACHE === 'true';
 
@@ -13,6 +16,30 @@ const CACHE_CONFIG = {
   supportedImageExts: ['.jpg', '.jpeg', '.png', '.webp', '.svg'],
   supportedAudioExts: ['.mp3'],
 } as const;
+
+// Tipos para inventario de audios
+export type AudioDownloadStatus = 'downloaded' | 'pending' | 'no_url' | 'corrupted';
+
+export interface AudioInventoryItem {
+  id: string;
+  table: 'sings' | 'tracks' | 'interviews';
+  title?: string;
+  audio_url: string | null;
+  expectedPath: string;
+  exists: boolean;
+  size: number;
+  status: AudioDownloadStatus;
+}
+
+export interface AudioInventorySummary {
+  total: number;
+  downloaded: number;
+  pending: number;
+  no_url: number;
+  corrupted: number;
+  totalSizeMB: number;
+  items: AudioInventoryItem[];
+}
 
 // Helper para logs condicionales
 function log(...args: any[]) {
@@ -638,39 +665,37 @@ export async function ensureCachedMedia(url?: string | null, type: 'audio' | 'im
     // ¿Ya existe?
     const existing = await Filesystem.stat({ path: relPath, directory: Directory.Data }).catch(() => null);
     if (!existing) {
-      // 🔹 Si estamos online → siempre usar la URL remota como fuente principal
+      // 🔹 Si estamos online → descargar archivo
       if (!isOffline) {
         const ok = type === "image" 
           ? await downloadImageStreaming(relPath, url)
           : await downloadTo(relPath, url);
-        // Si la descarga falla estando online → igual devolvemos la URL remota
+        
+        // Si la descarga falla estando online → devolver URL remota como fallback
         if (!ok) return url;
         
-        // Para imágenes, verificar si está corrupta y reintentar
+        // Verificar corrupción (solo para imágenes)
         if (type === "image") {
           const retryResult = await retryDownloadIfCorrupt(url, relPath);
           if (retryResult === url) {
             return url;
           }
-          // Si retryResult es el path, continuar para obtener URI
-        } else {
-          return url;
         }
+        // ✅ CAMBIO: Para ambos tipos (imagen y audio), continuar al final para obtener URI local
+        // No retornar url aquí, dejar que fluya a la resolución de URI
       } else {
-        // 🔹 Si estamos offline y NO existe archivo → NO devolver undefined
-        // Simplemente devolvemos la URL remota (fallback natural)
+        // 🔹 Si estamos offline y NO existe archivo → devolver URL remota como fallback
         return url;
       }
     }
 
-    // Resolver URI nativa segura
+    // Resolver URI nativa segura (tanto para imágenes como audios)
     // Verificar corrupción antes de obtener URI (solo para imágenes existentes)
     if (type === "image") {
       const retryResult = await retryDownloadIfCorrupt(url, relPath);
       if (retryResult !== relPath) {
         return url; // Archivo corrupto y no se pudo recuperar
       }
-      // Archivo válido o recuperado, obtener URI
     }
     
     const uriRes = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
@@ -753,6 +778,7 @@ export const mediaCacheService = {
   cacheAudio,
   getCacheSize,
   clearCache,
+  getAudioDownloadInventory,
 };
 
 // Exportar funciones individuales para compatibilidad
@@ -1053,5 +1079,168 @@ export async function verifyAudioCacheWithProgress(
   console.log(`[DebugVerify] ✅ Finalizado — total=${total}, completos=${completed}, faltantes=${missing}`);
   
   return { total, missing, completed };
+}
+
+/**
+ * Genera un inventario completo de audios comparando SQLite contra Filesystem
+ * @returns Resumen con total, descargados, pendientes y detalles de cada audio
+ */
+export async function getAudioDownloadInventory(): Promise<AudioInventorySummary> {
+  console.log('[AudioInventory] 🔍 Generando inventario de audios...');
+  
+  const items: AudioInventoryItem[] = [];
+  let totalSize = 0;
+  const MIN_SIZE_BYTES = 30 * 1024; // 30 KB mínimo para considerar válido
+
+  try {
+    // 1. Obtener todos los audios de SQLite
+    const [sings, tracks, interviews] = await Promise.all([
+      getAllSings(),
+      getAllTracks(),
+      getAllInterviews(),
+    ]);
+
+    console.log(`[AudioInventory] Audios en SQLite: ${sings.length} sings, ${tracks.length} tracks, ${interviews.length} interviews`);
+
+    // 2. Procesar cada tipo de audio
+    // Procesar sings
+    for (const sing of sings) {
+      const item = await processAudioItem(sing, 'sings', MIN_SIZE_BYTES);
+      items.push(item);
+      totalSize += item.size;
+    }
+
+    // Procesar tracks
+    for (const track of tracks) {
+      const item = await processAudioItem(track, 'tracks', MIN_SIZE_BYTES);
+      items.push(item);
+      totalSize += item.size;
+    }
+
+    // Procesar interviews
+    for (const interview of interviews) {
+      const item = await processAudioItem(interview, 'interviews', MIN_SIZE_BYTES);
+      items.push(item);
+      totalSize += item.size;
+    }
+
+    // 3. Calcular resumen
+    const summary: AudioInventorySummary = {
+      total: items.length,
+      downloaded: items.filter(i => i.status === 'downloaded').length,
+      pending: items.filter(i => i.status === 'pending').length,
+      no_url: items.filter(i => i.status === 'no_url').length,
+      corrupted: items.filter(i => i.status === 'corrupted').length,
+      totalSizeMB: totalSize / (1024 * 1024),
+      items,
+    };
+
+    console.log('[AudioInventory] ✅ Inventario completado:', {
+      total: summary.total,
+      downloaded: summary.downloaded,
+      pending: summary.pending,
+      no_url: summary.no_url,
+      corrupted: summary.corrupted,
+      totalSizeMB: summary.totalSizeMB.toFixed(2),
+    });
+
+    return summary;
+  } catch (error) {
+    console.error('[AudioInventory] ❌ Error generando inventario:', error);
+    // Retornar inventario vacío en caso de error
+    return {
+      total: 0,
+      downloaded: 0,
+      pending: 0,
+      no_url: 0,
+      corrupted: 0,
+      totalSizeMB: 0,
+      items: [],
+    };
+  }
+}
+
+/**
+ * Procesa un item de audio individual para determinar su estado
+ */
+async function processAudioItem(
+  audio: Sing | Track | Interview,
+  table: 'sings' | 'tracks' | 'interviews',
+  minSizeBytes: number
+): Promise<AudioInventoryItem> {
+  // Caso 1: Sin URL
+  if (!audio.audio_url || audio.audio_url.trim() === '') {
+    return {
+      id: audio.id,
+      table,
+      title: audio.title,
+      audio_url: null,
+      expectedPath: '',
+      exists: false,
+      size: 0,
+      status: 'no_url',
+    };
+  }
+
+  // Caso 2: Con URL - calcular hash y verificar archivo
+  try {
+    // Generar hash SHA-256 de la URL (misma lógica que usa mediaCacheService)
+    const hash = await sha256(audio.audio_url);
+    const expectedPath = `imaginario/audio/${hash}.mp3`;
+
+    // Verificar si el archivo existe
+    try {
+      const stat = await Filesystem.stat({
+        path: expectedPath,
+        directory: Directory.Data,
+      });
+
+      const size = stat.size || 0;
+
+      // Determinar status según tamaño
+      let status: AudioDownloadStatus;
+      if (size < minSizeBytes) {
+        status = 'corrupted';
+      } else {
+        status = 'downloaded';
+      }
+
+      return {
+        id: audio.id,
+        table,
+        title: audio.title,
+        audio_url: audio.audio_url,
+        expectedPath,
+        exists: true,
+        size,
+        status,
+      };
+    } catch (statError) {
+      // Archivo no existe
+      return {
+        id: audio.id,
+        table,
+        title: audio.title,
+        audio_url: audio.audio_url,
+        expectedPath,
+        exists: false,
+        size: 0,
+        status: 'pending',
+      };
+    }
+  } catch (error) {
+    console.error(`[AudioInventory] Error procesando audio ${audio.id}:`, error);
+    // En caso de error, marcar como pending
+    return {
+      id: audio.id,
+      table,
+      title: audio.title,
+      audio_url: audio.audio_url,
+      expectedPath: '',
+      exists: false,
+      size: 0,
+      status: 'pending',
+    };
+  }
 }
 

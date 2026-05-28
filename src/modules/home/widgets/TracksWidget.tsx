@@ -16,6 +16,7 @@ type Props = {
   onItemClick?: (id: string) => void;
   showViewMore?: boolean;      // muestra u oculta el botón "Ver más"
   maxItems?: number;            // limita cantidad de ítems visibles
+  limit?: number | null;        // control explícito del límite: null = sin límite, undefined = usar maxItems
 };
 
 // Subcomponente individual (idéntico a SingCard)
@@ -71,7 +72,7 @@ const TrackCard: React.FC<TrackCardProps> = ({ track, isPlaying, onToggle }) => 
         <div className="in-track-card-info">
           <div className="track-card-title h3-i _mdm primary-i">{track.title || 'Sin título'}</div>
           {track.interpreters && (
-            <div className="track-card-subtitle h4-i _lgt primary-i">{track.interpreters}</div>
+            <div className="track-card-subtitle h4-i _lgt primary-i ">{track.interpreters}</div>
           )}
           <div className="l2-i _rgl primary-i">
             {[track.instruments, track.author]
@@ -108,6 +109,7 @@ const TracksWidget: React.FC<Props> = ({
   onItemClick,
   showViewMore = true,
   maxItems = 6,
+  limit,
 }) => {
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
   const router = useIonRouter();
@@ -120,7 +122,10 @@ const TracksWidget: React.FC<Props> = ({
   }, []);
 
   // Variable derivada: limitar ítems visibles
-  const visibleItems = items.slice(0, maxItems);
+  const visibleItems =
+    limit === null
+      ? items
+      : items.slice(0, limit ?? maxItems);
 
   const handlePlayTrack = (trackId: string, url: string) => {
     audioManager.toggle(trackId, url);

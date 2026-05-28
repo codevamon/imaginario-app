@@ -22,7 +22,9 @@
   padding: 0;
   margin: 0;
 }
-
+.bird-accordions {
+  padding-bottom: 5rem;
+}
 .bird-widget .track-list-i {
   margin: 0;
   padding: 0;

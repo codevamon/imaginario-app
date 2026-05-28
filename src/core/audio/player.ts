@@ -211,38 +211,48 @@ async function getSafeAudioUrl(path: string): Promise<string> {
  */
 async function prepareSource(originalSrc: string, id: string): Promise<string> {
   try {
-    const { connected } = await Network.getStatus();
-
     // Importante: el hash debe ser idéntico al de ensureCachedMedia (sha256(url) sin encodeURI)
     const hash = await sha256(originalSrc);
     const relPath = `imaginario/audio/${hash}.mp3`;
 
-    // Si estamos offline, intenta resolver local
-    if (!connected) {
-      try {
-        const stat = await Filesystem.stat({ path: relPath, directory: Directory.Data });
-        if (stat) {
-          const uri = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
-          const fileUri = uri.uri.startsWith('file://') ? uri.uri : `file://${uri.uri}`;
-          console.log('[AudioManager] 🎧 Reproduciendo desde caché local:', fileUri);
-          return fileUri;
-        }
-      } catch {
-        console.warn('[AudioManager] ⚠️ Archivo no disponible sin conexión:', originalSrc);
-        if (typeof window !== 'undefined') {
-          const toast = document.createElement('ion-toast');
-          toast.message = '⚠️ Archivo no disponible sin conexión';
-          toast.duration = 2000;
-          document.body.appendChild(toast);
-          toast.present();
-        }
-        return originalSrc;
+    // 🎯 PRIORIDAD 1: Intentar usar archivo local SIEMPRE (con o sin red)
+    try {
+      const stat = await Filesystem.stat({ path: relPath, directory: Directory.Data });
+      // Verificar que el archivo existe y tiene tamaño válido (> 1KB)
+      if (stat && stat.size && stat.size > 1024) {
+        const uri = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
+        const fileUri = uri.uri.startsWith('file://') ? uri.uri : `file://${uri.uri}`;
+        console.log('[AudioManager] 🎧 Reproduciendo desde caché local:', fileUri, `(${(stat.size / 1024).toFixed(1)} KB)`);
+        return fileUri;
+      } else if (stat && stat.size && stat.size <= 1024) {
+        // Archivo existe pero es sospechosamente pequeño (posiblemente corrupto)
+        console.warn('[AudioManager] ⚠️ Archivo local corrupto o incompleto (', stat.size, 'bytes), descargando de nuevo');
       }
+    } catch (statError) {
+      // Archivo no existe localmente, continuar al paso 2
+      console.log('[AudioManager] 📡 Archivo no encontrado en caché local, verificando conexión...');
     }
 
-    // Si hay red: asegurar copia local, devolver original
-    await ensureCachedMedia(originalSrc, 'audio');
-    return originalSrc;
+    // 🌐 PRIORIDAD 2: Si no existe archivo local, verificar conexión
+    const { connected } = await Network.getStatus();
+
+    if (connected) {
+      // Si hay red: descargar en background y usar URL remota
+      console.log('[AudioManager] 🌐 Descargando en background desde:', originalSrc);
+      await ensureCachedMedia(originalSrc, 'audio');
+      return originalSrc;
+    } else {
+      // Si no hay red y no hay archivo local: mostrar warning y usar URL remota como fallback
+      console.warn('[AudioManager] ⚠️ Sin conexión y archivo no disponible localmente:', originalSrc);
+      if (typeof window !== 'undefined') {
+        const toast = document.createElement('ion-toast');
+        toast.message = '⚠️ Audio no disponible sin conexión';
+        toast.duration = 2000;
+        document.body.appendChild(toast);
+        toast.present();
+      }
+      return originalSrc;
+    }
   } catch (error) {
     console.warn('[AudioManager] Error en prepareSource:', error);
     return originalSrc;
@@ -669,15 +679,18 @@ class AudioManager {
     if (finalSrc.includes('_capacitor_file_') || finalSrc.startsWith('capacitor://localhost/_capacitor_file_') || finalSrc.startsWith('https://localhost/_capacitor_file_')) {
       try {
         // Extraer el path relativo del URI
-        let relativePath = finalSrc.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
+        let relativePath = finalSrc
+          .replace('file://', '')
+          .replace('capacitor://localhost/_capacitor_file_', '')
+          .replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
         relativePath = decodeURIComponent(relativePath);
         
-        // Si el path contiene 'imaginario/', extraer solo esa parte
-        const imaginarioIndex = relativePath.indexOf('imaginario/');
-        if (imaginarioIndex !== -1) {
-          relativePath = relativePath.substring(imaginarioIndex);
-        } else {
-          // Si no tiene 'imaginario/', intentar extraer desde el nombre del archivo
+        // ✅ Eliminar path absoluto completo hasta /files/ para evitar conflicto con package name
+        // Esto previene que indexOf('imaginario/') encuentre 'app.imaginario/' en vez de 'imaginario/audio/'
+        relativePath = relativePath.replace(/^\/data\/user\/0\/[^/]+\/files\//, '');
+        
+        // Si después del regex no empieza con 'imaginario/', construir path manualmente
+        if (!relativePath.startsWith('imaginario/')) {
           const fileName = finalSrc.split('/').pop() || '';
           relativePath = `imaginario/audio/${decodeURIComponent(fileName)}`;
         }
