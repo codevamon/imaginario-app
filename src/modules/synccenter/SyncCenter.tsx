@@ -6,20 +6,69 @@ import {
 import { useState, useEffect } from 'react';
 import { Network } from '@capacitor/network';
 import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
-import { mediaCacheService, type AudioInventorySummary } from '../../core/cache/mediaCacheService';
+import { getLocalDataSummary, type LocalDataSummary } from '../../core/sync/localDataSummary';
+import { getBirdOfflineStatusInventory, type BirdOfflineStatusInventory } from '../../core/sync/birdOfflineInventory';
+import { mediaCacheService, type AudioInventoryItem, type AudioInventorySummary, type ImageInventoryItem, type ImageInventorySummary } from '../../core/cache/mediaCacheService';
+
+type DownloadState = {
+  downloading: boolean;
+  progress: number;
+  error?: string | null;
+};
 
 export default function SyncCenter() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [localDataSummary, setLocalDataSummary] = useState<LocalDataSummary | null>(null);
+  const [localDataLoading, setLocalDataLoading] = useState(false);
+  const [birdOfflineInventory, setBirdOfflineInventory] = useState<BirdOfflineStatusInventory | null>(null);
+  const [birdOfflineLoading, setBirdOfflineLoading] = useState(false);
   const [audioInventory, setAudioInventory] = useState<AudioInventorySummary | null>(null);
+  const [imageInventory, setImageInventory] = useState<ImageInventorySummary | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [imageInventoryLoading, setImageInventoryLoading] = useState(false);
+  const [downloadStates, setDownloadStates] = useState<Record<string, DownloadState>>({});
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const [downloadingImageId, setDownloadingImageId] = useState<string | null>(null);
+  const [downloadingMissingImages, setDownloadingMissingImages] = useState(false);
+  const [imageDownloadProgress, setImageDownloadProgress] = useState(0);
 
   // Cargar inventario al montar el componente
   useEffect(() => {
+    loadLocalDataSummary();
+    loadBirdOfflineInventory();
     loadAudioInventory();
+    loadImageInventory();
   }, []);
+
+  async function loadLocalDataSummary() {
+    setLocalDataLoading(true);
+    try {
+      const summary = await getLocalDataSummary();
+      setLocalDataSummary(summary);
+      console.log('[SyncCenter] 📊 Estado de datos cargado:', summary);
+    } catch (error) {
+      console.error('[SyncCenter] Error al cargar estado de datos:', error);
+    } finally {
+      setLocalDataLoading(false);
+    }
+  }
+
+  async function loadBirdOfflineInventory() {
+    setBirdOfflineLoading(true);
+    try {
+      const inventory = await getBirdOfflineStatusInventory();
+      setBirdOfflineInventory(inventory);
+      console.log('[SyncCenter] 📊 Estado por ave cargado:', inventory);
+    } catch (error) {
+      console.error('[SyncCenter] Error al cargar estado por ave:', error);
+    } finally {
+      setBirdOfflineLoading(false);
+    }
+  }
 
   async function loadAudioInventory() {
     setInventoryLoading(true);
@@ -31,6 +80,19 @@ export default function SyncCenter() {
       console.error('[SyncCenter] Error al cargar inventario:', error);
     } finally {
       setInventoryLoading(false);
+    }
+  }
+
+  async function loadImageInventory() {
+    setImageInventoryLoading(true);
+    try {
+      const inventory = await mediaCacheService.getImageDownloadInventory();
+      setImageInventory(inventory);
+      console.log('[SyncCenter] 📊 Inventario de imágenes cargado:', inventory);
+    } catch (error) {
+      console.error('[SyncCenter] Error al cargar inventario de imágenes:', error);
+    } finally {
+      setImageInventoryLoading(false);
     }
   }
 
@@ -57,6 +119,13 @@ export default function SyncCenter() {
       } else {
         setSyncMessage(`❌ Error en sync rápido: ${result.errors.join(', ')}`);
       }
+
+      await Promise.all([
+        loadLocalDataSummary(),
+        loadBirdOfflineInventory(),
+        loadAudioInventory(),
+        loadImageInventory(),
+      ]);
     } catch (error) {
       console.error('[SyncCenter] Error en sync rápido:', error);
       setSyncMessage(`❌ Error crítico en sync rápido: ${error}`);
@@ -82,6 +151,12 @@ export default function SyncCenter() {
     
     try {
       await resyncAllTables();
+      await Promise.all([
+        loadLocalDataSummary(),
+        loadBirdOfflineInventory(),
+        loadAudioInventory(),
+        loadImageInventory(),
+      ]);
       setSyncMessage('✅ Resync completo terminado');
     } catch (error) {
       console.error('[SyncCenter] Error en resync completo:', error);
@@ -92,12 +167,23 @@ export default function SyncCenter() {
   }
 
   async function handleCheckAudioInventory() {
-    console.log('[SyncCenter] 🔍 Ejecutando inventario de audios...');
+    console.log('[SyncCenter] 🔍 Ejecutando inventario de descargas...');
     
     setInventoryLoading(true);
+    setImageInventoryLoading(true);
+    setLocalDataLoading(true);
+    setBirdOfflineLoading(true);
     try {
-      const inventory = await mediaCacheService.getAudioDownloadInventory();
+      const [inventory, imagesInventory, dataSummary, birdInventory] = await Promise.all([
+        mediaCacheService.getAudioDownloadInventory(),
+        mediaCacheService.getImageDownloadInventory(),
+        getLocalDataSummary(),
+        getBirdOfflineStatusInventory(),
+      ]);
       setAudioInventory(inventory);
+      setImageInventory(imagesInventory);
+      setLocalDataSummary(dataSummary);
+      setBirdOfflineInventory(birdInventory);
       
       // Log del resumen
       console.log('[SyncCenter] 📊 Resumen de audios:', {
@@ -108,6 +194,18 @@ export default function SyncCenter() {
         corrupted: inventory.corrupted,
         totalSizeMB: inventory.totalSizeMB
       });
+
+      console.log('[SyncCenter] 📊 Resumen de imágenes:', {
+        total: imagesInventory.total,
+        downloaded: imagesInventory.downloaded,
+        pending: imagesInventory.pending,
+        no_url: imagesInventory.no_url,
+        corrupted: imagesInventory.corrupted,
+        totalSizeMB: imagesInventory.totalSizeMB
+      });
+
+      console.log('[SyncCenter] 📊 Estado de datos:', dataSummary);
+      console.log('[SyncCenter] 📊 Estado por ave:', birdInventory);
       
       // Log de los primeros 20 items con status pending o corrupted
       const problemItems = inventory.items
@@ -120,15 +218,232 @@ export default function SyncCenter() {
       } else {
         console.log('[SyncCenter] ✅ No hay items pendientes o corruptos');
       }
+
+      const problemImageItems = imagesInventory.items
+        .filter(item => item.status === 'pending' || item.status === 'corrupted')
+        .slice(0, 20);
       
-      setSyncMessage(`✅ Inventario actualizado: ${inventory.downloaded}/${inventory.total} descargados`);
+      if (problemImageItems.length > 0) {
+        console.log(`[SyncCenter] ⚠️ Imágenes con problemas (primeras 20):`);
+        console.table(problemImageItems);
+      } else {
+        console.log('[SyncCenter] ✅ No hay imágenes pendientes o corruptas');
+      }
+      
+      setSyncMessage(`✅ Inventario actualizado: ${inventory.downloaded}/${inventory.total} audios, ${imagesInventory.downloaded}/${imagesInventory.total} imágenes`);
       setShowToast(true);
     } catch (error) {
-      console.error('[SyncCenter] Error al obtener inventario de audios:', error);
-      setSyncMessage(`❌ Error al verificar audios: ${error}`);
+      console.error('[SyncCenter] Error al obtener inventario de descargas:', error);
+      setSyncMessage(`❌ Error al verificar descargas: ${error}`);
       setShowToast(true);
     } finally {
       setInventoryLoading(false);
+      setImageInventoryLoading(false);
+      setLocalDataLoading(false);
+      setBirdOfflineLoading(false);
+    }
+  }
+
+  function getItemKey(item: AudioInventoryItem) {
+    return `${item.table}-${item.id}`;
+  }
+
+  async function handleDownloadAudioItem(item: AudioInventoryItem) {
+    if (!item.audio_url) {
+      setSyncMessage('❌ Este audio no tiene URL de descarga');
+      setShowToast(true);
+      return;
+    }
+
+    const key = getItemKey(item);
+
+    setDownloadStates(prev => ({
+      ...prev,
+      [key]: { downloading: true, progress: 0, error: null },
+    }));
+
+    try {
+      const result = await mediaCacheService.downloadAudioItem(item.audio_url, {
+        destPath: item.expectedPath || undefined,
+        onProgress: (percent) => {
+          setDownloadStates(prev => ({
+            ...prev,
+            [key]: {
+              ...(prev[key] ?? { downloading: true, progress: 0, error: null }),
+              progress: percent,
+            },
+          }));
+        },
+      });
+
+      if (result.success) {
+        setDownloadStates(prev => ({
+          ...prev,
+          [key]: {
+            ...(prev[key] ?? { downloading: true, progress: 0, error: null }),
+            progress: 100,
+            error: null,
+          },
+        }));
+        setSyncMessage('✅ Audio descargado');
+        setShowToast(true);
+        await loadAudioInventory();
+      } else {
+        const error = result.error || 'Error desconocido';
+        setDownloadStates(prev => ({
+          ...prev,
+          [key]: {
+            ...(prev[key] ?? { downloading: true, progress: 0 }),
+            error,
+          },
+        }));
+        setSyncMessage(`❌ Error descargando audio: ${error}`);
+        setShowToast(true);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDownloadStates(prev => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] ?? { downloading: true, progress: 0 }),
+          error: message,
+        },
+      }));
+      setSyncMessage(`❌ Error descargando audio: ${message}`);
+      setShowToast(true);
+    } finally {
+      setDownloadStates(prev => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] ?? { progress: 0, error: null }),
+          downloading: false,
+        },
+      }));
+    }
+  }
+
+  async function handleDownloadMissingAudios() {
+    if (!audioInventory || bulkDownloading) return;
+
+    const itemsToDownload = audioInventory.items.filter(
+      item => (item.status === 'pending' || item.status === 'corrupted') && item.audio_url
+    );
+
+    if (itemsToDownload.length === 0) {
+      setSyncMessage('✅ No hay audios faltantes para descargar');
+      setShowToast(true);
+      return;
+    }
+
+    setBulkDownloading(true);
+    setBulkProgress({ done: 0, total: itemsToDownload.length });
+
+    try {
+      for (let index = 0; index < itemsToDownload.length; index++) {
+        await handleDownloadAudioItem(itemsToDownload[index]);
+        setBulkProgress({ done: index + 1, total: itemsToDownload.length });
+      }
+
+      await loadAudioInventory();
+      await loadBirdOfflineInventory();
+      setSyncMessage(`✅ Descarga de faltantes completada: ${itemsToDownload.length}/${itemsToDownload.length}`);
+      setShowToast(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSyncMessage(`❌ Error descargando faltantes: ${message}`);
+      setShowToast(true);
+    } finally {
+      setBulkDownloading(false);
+    }
+  }
+
+  async function handleDownloadImageItem(item: ImageInventoryItem) {
+    if (!item.image_url) {
+      setSyncMessage('❌ Esta imagen no tiene URL de descarga');
+      setShowToast(true);
+      return;
+    }
+
+    const itemKey = `${item.table}-${item.id}`;
+    setDownloadingImageId(itemKey);
+    setImageDownloadProgress(0);
+
+    try {
+      const result = await mediaCacheService.downloadImageItem(item.image_url, {
+        destPath: item.expectedPath || undefined,
+        onProgress: setImageDownloadProgress,
+      });
+
+      if (result.success) {
+        setSyncMessage('✅ Imagen descargada');
+      } else {
+        setSyncMessage(`❌ Error descargando imagen: ${result.error || 'Error desconocido'}`);
+      }
+
+      setShowToast(true);
+      const inventory = await mediaCacheService.getImageDownloadInventory();
+      setImageInventory(inventory);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSyncMessage(`❌ Error descargando imagen: ${message}`);
+      setShowToast(true);
+    } finally {
+      setDownloadingImageId(null);
+      setImageDownloadProgress(0);
+    }
+  }
+
+  async function handleDownloadMissingImages() {
+    if (!imageInventory || downloadingMissingImages) return;
+
+    const itemsToDownload = imageInventory.items.filter(
+      item => (item.status === 'pending' || item.status === 'corrupted') && item.image_url
+    );
+
+    if (itemsToDownload.length === 0) {
+      setSyncMessage('No hay imágenes pendientes');
+      setShowToast(true);
+      return;
+    }
+
+    setDownloadingMissingImages(true);
+    setImageDownloadProgress(0);
+
+    let success = 0;
+    let fail = 0;
+    const total = itemsToDownload.length;
+
+    try {
+      for (let index = 0; index < total; index++) {
+        const item = itemsToDownload[index];
+        const result = await mediaCacheService.downloadImageItem(item.image_url!, {
+          destPath: item.expectedPath || undefined,
+        });
+
+        if (result.success) {
+          success++;
+        } else {
+          fail++;
+        }
+
+        setImageDownloadProgress(Math.round(((index + 1) / total) * 100));
+      }
+
+      const inventory = await mediaCacheService.getImageDownloadInventory();
+      setImageInventory(inventory);
+      await loadBirdOfflineInventory();
+      setSyncMessage(`Imágenes descargadas: ${success}/${total}`);
+      setShowToast(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSyncMessage(`❌ Error descargando imágenes: ${message}`);
+      setShowToast(true);
+    } finally {
+      if (fail > 0) {
+        console.warn(`[SyncCenter] Imágenes fallidas: ${fail}/${total}`);
+      }
+      setDownloadingMissingImages(false);
+      setImageDownloadProgress(0);
     }
   }
 
@@ -163,8 +478,87 @@ export default function SyncCenter() {
             textAlign: 'center',
             margin: '0 0 16px 0'
           }}>
-            {inventoryLoading ? 'Revisando...' : 'Sincronizado'}
+            {inventoryLoading || imageInventoryLoading || localDataLoading || birdOfflineLoading ? 'Revisando...' : 'Sincronizado'}
           </p>
+
+          {/* Estado de datos */}
+          {localDataSummary && (
+            <IonCard>
+              <IonCardContent>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>
+                  Estado de datos
+                </h3>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                  <IonBadge color="primary">Aves: {localDataSummary.birds}</IonBadge>
+                  <IonBadge color="primary">Imágenes: {localDataSummary.bird_images}</IonBadge>
+                  <IonBadge color="secondary">Cantos: {localDataSummary.sings}</IonBadge>
+                  <IonBadge color="secondary">Tracks: {localDataSummary.tracks}</IonBadge>
+                  <IonBadge color="secondary">Entrevistas: {localDataSummary.interviews}</IonBadge>
+                  <IonBadge color="tertiary">Músicos: {localDataSummary.musicians}</IonBadge>
+                  <IonBadge color="success">Total audio: {localDataSummary.total_audio}</IonBadge>
+                </div>
+
+                <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                  Último sync global:{' '}
+                  {localDataSummary.last_sync.global
+                    ? new Date(localDataSummary.last_sync.global).toLocaleString()
+                    : 'Sin sincronizar'}
+                </p>
+              </IonCardContent>
+            </IonCard>
+          )}
+
+          {/* Estado por ave */}
+          {birdOfflineInventory && (
+            <IonCard>
+              <IonCardContent>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>
+                  Estado por ave
+                </h3>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                  <IonBadge color="primary">Total: {birdOfflineInventory.total}</IonBadge>
+                  <IonBadge color="success">Completas: {birdOfflineInventory.complete}</IonBadge>
+                  <IonBadge color="warning">Pendientes: {birdOfflineInventory.partial}</IonBadge>
+                </div>
+
+                {(() => {
+                  const incompleteBirds = birdOfflineInventory.items
+                    .filter(item => !item.isComplete)
+                    .slice(0, 10);
+
+                  return incompleteBirds.length > 0 ? (
+                    <IonList>
+                      {incompleteBirds.map((item) => (
+                        <IonItem key={item.bird_id}>
+                          <IonLabel>
+                            <h3>{item.name}</h3>
+                            {item.scientific_name && (
+                              <p style={{ fontStyle: 'italic' }}>{item.scientific_name}</p>
+                            )}
+                            <p>
+                              Imágenes: {item.imageDownloaded} / {item.imageTotal}
+                            </p>
+                            <p>
+                              Audios: {item.audioDownloaded} / {item.audioTotal}
+                            </p>
+                          </IonLabel>
+                          <IonBadge slot="end" color={item.isComplete ? 'success' : 'warning'}>
+                            {item.isComplete ? 'Completa' : 'Pendiente'}
+                          </IonBadge>
+                        </IonItem>
+                      ))}
+                    </IonList>
+                  ) : (
+                    <p style={{ fontSize: '16px', color: '#4caf50', margin: 0, textAlign: 'center' }}>
+                      ✅ Todas las aves están completas
+                    </p>
+                  );
+                })()}
+              </IonCardContent>
+            </IonCard>
+          )}
 
           {/* Resumen de audios */}
           {audioInventory && (
@@ -195,6 +589,25 @@ export default function SyncCenter() {
                   <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', textAlign: 'center' }}>
                     {audioInventory.downloaded} / {audioInventory.total} audios descargados
                   </p>
+
+                  <IonButton
+                    expand="block"
+                    color="success"
+                    onClick={handleDownloadMissingAudios}
+                    disabled={bulkDownloading || inventoryLoading || !audioInventory}
+                    style={{ height: '48px', marginTop: '16px' }}
+                  >
+                    {bulkDownloading
+                      ? `Descargando ${bulkProgress.done}/${bulkProgress.total}...`
+                      : 'Descargar audios faltantes'}
+                  </IonButton>
+
+                  {bulkDownloading && (
+                    <IonProgressBar
+                      value={bulkProgress.total > 0 ? bulkProgress.done / bulkProgress.total : 0}
+                      style={{ height: '8px', borderRadius: '4px', marginTop: '8px' }}
+                    />
+                  )}
                 </IonCardContent>
               </IonCard>
 
@@ -212,21 +625,51 @@ export default function SyncCenter() {
                       </h3>
                       
                       <IonList>
-                        {problemItems.map((item, index) => (
-                          <IonItem key={`${item.table}-${item.id}-${index}`}>
-                            <IonLabel>
-                              <h3>{item.title || 'Sin título'}</h3>
-                              <p>
-                                <IonBadge color="medium" style={{ marginRight: '4px' }}>
-                                  {item.table}
-                                </IonBadge>
-                                <IonBadge color={item.status === 'corrupted' ? 'danger' : 'warning'}>
-                                  {item.status === 'corrupted' ? 'Corrupto' : 'Pendiente'}
-                                </IonBadge>
-                              </p>
-                            </IonLabel>
-                          </IonItem>
-                        ))}
+                        {problemItems.map((item, index) => {
+                          const key = getItemKey(item);
+                          const state = downloadStates[key];
+                          const downloading = !!state?.downloading;
+                          const progress = state?.progress ?? 0;
+
+                          return (
+                            <IonItem key={`${key}-${index}`}>
+                              <IonLabel>
+                                <h3>{item.title || 'Sin título'}</h3>
+                                <p>
+                                  <IonBadge color="medium" style={{ marginRight: '4px' }}>
+                                    {item.table}
+                                  </IonBadge>
+                                  <IonBadge color={item.status === 'corrupted' ? 'danger' : 'warning'}>
+                                    {item.status === 'corrupted' ? 'Corrupto' : 'Pendiente'}
+                                  </IonBadge>
+                                </p>
+
+                                {downloading && (
+                                  <IonProgressBar
+                                    value={progress / 100}
+                                    style={{ height: '6px', borderRadius: '4px', marginTop: '8px' }}
+                                  />
+                                )}
+
+                                {state?.error && (
+                                  <p style={{ fontSize: '12px', color: '#d32f2f', marginTop: '6px' }}>
+                                    {state.error}
+                                  </p>
+                                )}
+                              </IonLabel>
+
+                              <IonButton
+                                slot="end"
+                                size="small"
+                                color={item.status === 'corrupted' ? 'danger' : 'warning'}
+                                disabled={downloading}
+                                onClick={() => handleDownloadAudioItem(item)}
+                              >
+                                {downloading ? 'Descargando...' : 'Descargar'}
+                              </IonButton>
+                            </IonItem>
+                          );
+                        })}
                       </IonList>
                     </IonCardContent>
                   </IonCard>
@@ -243,16 +686,133 @@ export default function SyncCenter() {
             </>
           )}
 
-          {/* Botón Verificar audios */}
+          {/* Resumen de imágenes */}
+          {imageInventory && (
+            <>
+              <IonCard>
+                <IonCardContent>
+                  <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>
+                    Resumen de Imágenes
+                  </h3>
+                  
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                    <IonBadge color="primary">Total: {imageInventory.total}</IonBadge>
+                    <IonBadge color="success">Descargadas: {imageInventory.downloaded}</IonBadge>
+                    <IonBadge color="warning">Pendientes: {imageInventory.pending}</IonBadge>
+                    <IonBadge color="medium">Sin URL: {imageInventory.no_url}</IonBadge>
+                    <IonBadge color="danger">Corruptas: {imageInventory.corrupted}</IonBadge>
+                  </div>
+                  
+                  <p style={{ fontSize: '14px', color: '#666', margin: '0 0 8px 0' }}>
+                    Tamaño total: {imageInventory.totalSizeMB.toFixed(2)} MB
+                  </p>
+                  
+                  <IonProgressBar 
+                    value={imageInventory.total > 0 ? imageInventory.downloaded / imageInventory.total : 0}
+                    style={{ height: '8px', borderRadius: '4px' }}
+                  />
+                  
+                  <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', textAlign: 'center' }}>
+                    {imageInventory.downloaded} / {imageInventory.total} imágenes descargadas
+                  </p>
+
+                  <IonButton
+                    expand="block"
+                    color="success"
+                    onClick={handleDownloadMissingImages}
+                    disabled={
+                      !imageInventory ||
+                      downloadingMissingImages ||
+                      !imageInventory.items.some(item => (item.status === 'pending' || item.status === 'corrupted') && item.image_url)
+                    }
+                    style={{ height: '48px', marginTop: '16px' }}
+                  >
+                    {downloadingMissingImages ? 'Descargando imágenes...' : 'Descargar imágenes faltantes'}
+                  </IonButton>
+
+                  {(downloadingMissingImages || downloadingImageId) && (
+                    <>
+                      <IonProgressBar
+                        value={imageDownloadProgress / 100}
+                        style={{ height: '8px', borderRadius: '4px', marginTop: '8px' }}
+                      />
+                      <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', textAlign: 'center' }}>
+                        {imageDownloadProgress}%
+                      </p>
+                    </>
+                  )}
+                </IonCardContent>
+              </IonCard>
+
+              {(() => {
+                const problemItems = imageInventory.items
+                  .filter(item => item.status === 'pending' || item.status === 'corrupted')
+                  .slice(0, 10);
+                
+                return problemItems.length > 0 ? (
+                  <IonCard>
+                    <IonCardContent>
+                      <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: '600' }}>
+                        Imágenes Pendientes o Corruptas ({problemItems.length})
+                      </h3>
+                      
+                      <IonList>
+                        {problemItems.map((item, index) => {
+                          const itemKey = `${item.table}-${item.id}`;
+                          const downloading = downloadingImageId === itemKey;
+
+                          return (
+                            <IonItem key={`${itemKey}-${index}`}>
+                              <IonLabel>
+                                <h3>{item.title || item.id}</h3>
+                                <p>
+                                  <IonBadge color="medium" style={{ marginRight: '4px' }}>
+                                    {item.table}
+                                  </IonBadge>
+                                  <IonBadge color={item.status === 'corrupted' ? 'danger' : 'warning'}>
+                                    {item.status === 'corrupted' ? 'Corrupta' : 'Pendiente'}
+                                  </IonBadge>
+                                </p>
+                              </IonLabel>
+
+                              <IonButton
+                                slot="end"
+                                size="small"
+                                color={item.status === 'corrupted' ? 'danger' : 'warning'}
+                                disabled={downloadingMissingImages || downloading}
+                                onClick={() => handleDownloadImageItem(item)}
+                              >
+                                {downloading ? 'Descargando...' : 'Descargar'}
+                              </IonButton>
+                            </IonItem>
+                          );
+                        })}
+                      </IonList>
+                    </IonCardContent>
+                  </IonCard>
+                ) : (
+                  <IonCard>
+                    <IonCardContent style={{ textAlign: 'center', padding: '24px' }}>
+                      <p style={{ fontSize: '16px', color: '#4caf50', margin: 0 }}>
+                        ✅ Todas las imágenes están descargadas correctamente
+                      </p>
+                    </IonCardContent>
+                  </IonCard>
+                );
+              })()}
+            </>
+          )}
+
+          {/* Botón Verificar estado */}
           <div style={{ marginBottom: '8px' }}>
             <IonButton 
               expand="block" 
               color="warning" 
               onClick={handleCheckAudioInventory}
-              disabled={inventoryLoading}
+              disabled={inventoryLoading || imageInventoryLoading || localDataLoading || birdOfflineLoading}
               style={{ height: '48px' }}
             >
-              {inventoryLoading ? <IonSpinner name="crescent" /> : 'Verificar audios descargados'}
+              {inventoryLoading || imageInventoryLoading || localDataLoading || birdOfflineLoading ? <IonSpinner name="crescent" /> : 'Verificar estado'}
             </IonButton>
             <p style={{ 
               fontSize: '14px', 
@@ -264,46 +824,57 @@ export default function SyncCenter() {
             </p>
           </div>
 
-          {/* Botón Sync rápido */}
-          <div style={{ marginBottom: '8px' }}>
-            <IonButton 
-              expand="block" 
-              onClick={handleSync} 
-              disabled={isSyncing}
-              style={{ height: '48px' }}
-            >
-              {isSyncing ? <IonSpinner name="crescent" /> : 'Sync rápido'}
-            </IonButton>
-            <p style={{ 
-              fontSize: '14px', 
-              color: '#666', 
-              textAlign: 'center',
-              margin: '8px 0 0 0'
-            }}>
-              Sincroniza solo los cambios nuevos
-            </p>
-          </div>
+          {/* Opciones avanzadas */}
+          <details style={{
+            marginBottom: '8px',
+            padding: '16px',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <summary style={{ fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+              Opciones avanzadas
+            </summary>
 
-          {/* Botón Resync completo */}
-          <div style={{ marginBottom: '8px' }}>
-            <IonButton 
-              expand="block" 
-              color="danger" 
-              onClick={handleResync} 
-              disabled={isResyncing}
-              style={{ height: '48px' }}
-            >
-              {isResyncing ? <IonSpinner name="crescent" /> : 'Resync completo'}
-            </IonButton>
-            <p style={{ 
-              fontSize: '14px', 
-              color: '#666', 
-              textAlign: 'center',
-              margin: '8px 0 0 0'
-            }}>
-              Descarga todos los datos desde cero
-            </p>
-          </div>
+            <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+              <IonButton 
+                expand="block" 
+                onClick={handleSync} 
+                disabled={isSyncing}
+                style={{ height: '48px' }}
+              >
+                {isSyncing ? <IonSpinner name="crescent" /> : 'Sync rápido'}
+              </IonButton>
+              <p style={{ 
+                fontSize: '14px', 
+                color: '#666', 
+                textAlign: 'center',
+                margin: '8px 0 0 0'
+              }}>
+                Actualiza cambios nuevos desde Supabase.
+              </p>
+            </div>
+
+            <div>
+              <IonButton 
+                expand="block" 
+                color="danger" 
+                onClick={handleResync} 
+                disabled={isResyncing}
+                style={{ height: '48px' }}
+              >
+                {isResyncing ? <IonSpinner name="crescent" /> : 'Resync completo'}
+              </IonButton>
+              <p style={{ 
+                fontSize: '14px', 
+                color: '#666', 
+                textAlign: 'center',
+                margin: '8px 0 0 0'
+              }}>
+                Recrea los datos locales desde cero. Úsalo solo si algo no coincide.
+              </p>
+            </div>
+          </details>
 
           {/* Información adicional */}
           <div style={{ 

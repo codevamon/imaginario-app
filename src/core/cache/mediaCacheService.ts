@@ -1,6 +1,8 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Network } from '@capacitor/network';
 import { getDb } from '../sqlite';
+import { listBirds } from '../db/dao/birds';
+import { getAllBirdImages } from '../db/dao/bird_images';
 import { getAllSings, type Sing } from '../db/dao/sings';
 import { getAllTracks, type Track } from '../db/dao/tracks';
 import { getAllInterviews, type Interview } from '../db/dao/interviews';
@@ -39,6 +41,31 @@ export interface AudioInventorySummary {
   corrupted: number;
   totalSizeMB: number;
   items: AudioInventoryItem[];
+}
+
+// Tipos para inventario de imágenes
+export type ImageDownloadStatus = 'downloaded' | 'pending' | 'no_url' | 'corrupted';
+
+export interface ImageInventoryItem {
+  id: string;
+  table: 'birds' | 'bird_images';
+  bird_id?: string;
+  title?: string;
+  image_url: string | null;
+  expectedPath: string;
+  exists: boolean;
+  size: number;
+  status: ImageDownloadStatus;
+}
+
+export interface ImageInventorySummary {
+  total: number;
+  downloaded: number;
+  pending: number;
+  no_url: number;
+  corrupted: number;
+  totalSizeMB: number;
+  items: ImageInventoryItem[];
 }
 
 // Helper para logs condicionales
@@ -223,6 +250,73 @@ async function downloadAudioNative(url: string, destPath: string): Promise<boole
   }
 }
 
+export async function downloadAudioItem(
+  audioUrl: string,
+  options?: {
+    destPath?: string;
+    onProgress?: (percent: number) => void;
+    minSizeBytes?: number;
+  }
+): Promise<{ success: boolean; path: string; size: number; error?: string }> {
+  if (!audioUrl || audioUrl.trim() === '') {
+    const error = 'audioUrl vacío';
+    logWarn('[downloadAudioItem] 🚫', error);
+    return { success: false, path: '', size: 0, error };
+  }
+
+  const minSizeBytes = options?.minSizeBytes ?? 30 * 1024;
+  let path = options?.destPath ?? '';
+
+  try {
+    const hash = await sha256(audioUrl);
+    path = path || `imaginario/audio/${hash}.mp3`;
+
+    const parent = path.split('/').slice(0, -1).join('/');
+    if (parent) {
+      await Filesystem.mkdir({
+        path: parent,
+        directory: Directory.Data,
+        recursive: true,
+      }).catch(() => {
+        // carpeta ya existe
+      });
+    }
+
+    log('[downloadAudioItem] ⬇️ Descargando:', audioUrl, '→', path);
+    options?.onProgress?.(0);
+
+    await Filesystem.downloadFile({
+      url: audioUrl,
+      directory: Directory.Data,
+      path,
+      progress: false,
+    });
+
+    const stat = await Filesystem.stat({
+      path,
+      directory: Directory.Data,
+    });
+    const size = stat?.size || 0;
+
+    if (size < minSizeBytes) {
+      await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
+      const error = `Archivo corrupto o incompleto (${size} bytes, mínimo ${minSizeBytes} bytes)`;
+      logWarn('[downloadAudioItem] ❌', error, path);
+      return { success: false, path, size: 0, error };
+    }
+
+    console.log('[mediaCache] audio descargado; limpieza automática omitida para preservar offline');
+    options?.onProgress?.(100);
+
+    log('[downloadAudioItem] ✅ Descarga completada:', path, 'bytes:', size);
+    return { success: true, path, size };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError('[downloadAudioItem] ❌ Error descargando audio:', audioUrl, message);
+    return { success: false, path, size: 0, error: message };
+  }
+}
+
 // ⚠️ Punto de IO: descarga de imagen
 /**
  * Descarga una imagen usando Filesystem.downloadFile nativo
@@ -272,6 +366,73 @@ async function downloadImageStreaming(path: string, url: string): Promise<boolea
   } catch (error) {
     log('[downloadImageStreaming] ❌ Error descargando archivo', url, error);
     return false;
+  }
+}
+
+export async function downloadImageItem(
+  imageUrl: string,
+  options?: {
+    destPath?: string;
+    onProgress?: (progress: number) => void;
+  }
+): Promise<{ success: boolean; path: string; size: number; error?: string }> {
+  if (!imageUrl || imageUrl.trim() === '') {
+    const error = 'imageUrl vacío';
+    logWarn('[downloadImageItem] 🚫', error);
+    return { success: false, path: '', size: 0, error };
+  }
+
+  let path = options?.destPath ?? '';
+
+  try {
+    if (!path) {
+      const hash = await hashUrl(imageUrl);
+      const ext = getExtensionFromUrl(imageUrl, 'image');
+      path = `${CACHE_CONFIG.imagesDir}/${hash}${ext}`;
+    }
+
+    const parent = path.split('/').slice(0, -1).join('/');
+    if (parent) {
+      await Filesystem.mkdir({
+        path: parent,
+        directory: Directory.Data,
+        recursive: true,
+      }).catch(() => {
+        // carpeta ya existe
+      });
+    }
+
+    log('[downloadImageItem] ⬇️ Descargando:', imageUrl, '→', path);
+
+    const ok = await downloadImageStreaming(path, imageUrl);
+    if (!ok) {
+      const error = 'No se pudo descargar la imagen';
+      logWarn('[downloadImageItem] ❌', error, path);
+      return { success: false, path, size: 0, error };
+    }
+
+    const stat = await Filesystem.stat({
+      path,
+      directory: Directory.Data,
+    });
+    const size = stat?.size || 0;
+
+    if (size < 100) {
+      await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
+      const error = `Imagen corrupta o incompleta (${size} bytes, mínimo 100 bytes)`;
+      logWarn('[downloadImageItem] ❌', error, path);
+      return { success: false, path, size, error };
+    }
+
+    console.log('[mediaCache] imagen descargada; limpieza automática omitida para preservar offline');
+    options?.onProgress?.(100);
+
+    log('[downloadImageItem] ✅ Descarga completada:', path, 'bytes:', size);
+    return { success: true, path, size };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError('[downloadImageItem] ❌ Error descargando imagen:', imageUrl, message);
+    return { success: false, path, size: 0, error: message };
   }
 }
 
@@ -776,9 +937,12 @@ async function clearCache(): Promise<void> {
 export const mediaCacheService = {
   cacheImage,
   cacheAudio,
+  downloadAudioItem,
+  downloadImageItem,
   getCacheSize,
   clearCache,
   getAudioDownloadInventory,
+  getImageDownloadInventory,
 };
 
 // Exportar funciones individuales para compatibilidad
@@ -1236,6 +1400,160 @@ async function processAudioItem(
       table,
       title: audio.title,
       audio_url: audio.audio_url,
+      expectedPath: '',
+      exists: false,
+      size: 0,
+      status: 'pending',
+    };
+  }
+}
+
+/**
+ * Genera un inventario completo de imágenes comparando SQLite contra Filesystem
+ * @returns Resumen con total, descargadas, pendientes y detalles de cada imagen
+ */
+export async function getImageDownloadInventory(): Promise<ImageInventorySummary> {
+  console.log('[ImageInventory] 🔍 Generando inventario de imágenes...');
+
+  const items: ImageInventoryItem[] = [];
+  let totalSize = 0;
+  const MIN_SIZE_BYTES = 100;
+
+  try {
+    const [birds, birdImages] = await Promise.all([
+      listBirds(),
+      getAllBirdImages(),
+    ]);
+
+    console.log(`[ImageInventory] Imágenes en SQLite: ${birds.length} birds, ${birdImages.length} bird_images`);
+
+    for (const bird of birds) {
+      const item = await processImageItem({
+        id: bird.id,
+        table: 'birds',
+        title: bird.name,
+        imageUrl: bird.image_url,
+      }, MIN_SIZE_BYTES);
+      items.push(item);
+      totalSize += item.size;
+    }
+
+    for (const image of birdImages) {
+      const item = await processImageItem({
+        id: image.id,
+        table: 'bird_images',
+        bird_id: image.bird_id,
+        title: image.description,
+        imageUrl: image.url,
+      }, MIN_SIZE_BYTES);
+      items.push(item);
+      totalSize += item.size;
+    }
+
+    const summary: ImageInventorySummary = {
+      total: items.length,
+      downloaded: items.filter(i => i.status === 'downloaded').length,
+      pending: items.filter(i => i.status === 'pending').length,
+      no_url: items.filter(i => i.status === 'no_url').length,
+      corrupted: items.filter(i => i.status === 'corrupted').length,
+      totalSizeMB: totalSize / (1024 * 1024),
+      items,
+    };
+
+    console.log('[ImageInventory] ✅ Inventario completado:', {
+      total: summary.total,
+      downloaded: summary.downloaded,
+      pending: summary.pending,
+      no_url: summary.no_url,
+      corrupted: summary.corrupted,
+      totalSizeMB: summary.totalSizeMB.toFixed(2),
+    });
+
+    return summary;
+  } catch (error) {
+    console.error('[ImageInventory] ❌ Error generando inventario:', error);
+    return {
+      total: 0,
+      downloaded: 0,
+      pending: 0,
+      no_url: 0,
+      corrupted: 0,
+      totalSizeMB: 0,
+      items: [],
+    };
+  }
+}
+
+async function processImageItem(
+  image: {
+    id: string;
+    table: 'birds' | 'bird_images';
+    bird_id?: string;
+    title?: string;
+    imageUrl?: string | null;
+  },
+  minSizeBytes: number
+): Promise<ImageInventoryItem> {
+  if (!image.imageUrl || image.imageUrl.trim() === '') {
+    return {
+      id: image.id,
+      table: image.table,
+      bird_id: image.bird_id,
+      title: image.title,
+      image_url: null,
+      expectedPath: '',
+      exists: false,
+      size: 0,
+      status: 'no_url',
+    };
+  }
+
+  try {
+    const hash = await hashUrl(image.imageUrl);
+    const ext = getExtensionFromUrl(image.imageUrl, 'image');
+    const expectedPath = `${CACHE_CONFIG.imagesDir}/${hash}${ext}`;
+
+    try {
+      const stat = await Filesystem.stat({
+        path: expectedPath,
+        directory: Directory.Data,
+      });
+
+      const size = stat.size || 0;
+      const status: ImageDownloadStatus = size < minSizeBytes ? 'corrupted' : 'downloaded';
+
+      return {
+        id: image.id,
+        table: image.table,
+        bird_id: image.bird_id,
+        title: image.title,
+        image_url: image.imageUrl,
+        expectedPath,
+        exists: true,
+        size,
+        status,
+      };
+    } catch (statError) {
+      return {
+        id: image.id,
+        table: image.table,
+        bird_id: image.bird_id,
+        title: image.title,
+        image_url: image.imageUrl,
+        expectedPath,
+        exists: false,
+        size: 0,
+        status: 'pending',
+      };
+    }
+  } catch (error) {
+    console.error(`[ImageInventory] Error procesando imagen ${image.id}:`, error);
+    return {
+      id: image.id,
+      table: image.table,
+      bird_id: image.bird_id,
+      title: image.title,
+      image_url: image.imageUrl,
       expectedPath: '',
       exists: false,
       size: 0,

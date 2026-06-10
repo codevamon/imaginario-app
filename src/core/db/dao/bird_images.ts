@@ -62,3 +62,28 @@ export async function getImageById(id: string): Promise<BirdImage | null> {
     return null;
   }
 }
+
+export async function getAllBirdImages(): Promise<BirdImage[]> {
+  try {
+    const db = await getDb();
+    const result = await db.query(`
+      SELECT * FROM bird_images
+      WHERE deleted_at IS NULL OR deleted_at = ''
+      ORDER BY updated_at DESC
+    `);
+
+    const images: BirdImage[] = (result.values || []).map((row: any) => ({
+      id: row.id,
+      bird_id: row.bird_id,
+      url: row.url,
+      description: row.description,
+      updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+      deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null
+    }));
+
+    return images;
+  } catch (error) {
+    console.error('[DAO] getAllBirdImages error:', error);
+    return [];
+  }
+}
