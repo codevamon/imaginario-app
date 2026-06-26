@@ -41,6 +41,9 @@ importers:
       '@capacitor/status-bar':
         specifier: 7.0.2
         version: 7.0.2(@capacitor/core@7.4.3)
+      '@capgo/native-audio':
+        specifier: ^7.11.2
+        version: 7.11.2(@capacitor/core@7.4.3)
       '@ionic/react':
         specifier: ^8.5.0
         version: 8.7.3(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -731,6 +734,12 @@ packages:
 
   '@capacitor/synapse@1.0.4':
     resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
+
+  '@capgo/native-audio@7.11.2':
+    resolution: {integrity: sha512-/V4NIeo9BN5o5QEYQkPpeyZWQ/XKxBV8xNweMepviD7nugePKKCFa9Iy5ETJCybh/sV7mnbk6bMNcKcp+ohNPQ==}
+    deprecated: This package has moved to @capgo/capacitor-native-audio. Please install @capgo/capacitor-native-audio instead.
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
@@ -4438,6 +4447,10 @@ snapshots:
       '@capacitor/core': 7.4.3
 
   '@capacitor/synapse@1.0.4': {}
+
+  '@capgo/native-audio@7.11.2(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
 
   '@colors/colors@1.5.0':
     optional: true

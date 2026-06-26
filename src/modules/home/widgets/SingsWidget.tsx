@@ -133,7 +133,11 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
   }, [items]);
 
   const handlePlaySing = (singId: string, url: string) => {
-    audioManager.toggle(singId, url);
+    const sing = displaySings.find((s) => s.id === singId);
+    audioManager.toggle(singId, url, {
+      title: sing?.title || 'Canto sin título',
+      artist: sing?.author || sing?.community || sing?.interpreters || 'Imaginario',
+    });
     onItemClick?.(singId);
   };
 

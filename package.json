@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@capacitor-community/native-audio": "^7.0.1",
+    "@capgo/native-audio": "^7.11.2",
     "@capacitor-community/sqlite": "7.0.1",
     "@capacitor/android": "7.4.3",
     "@capacitor/app": "7.0.2",

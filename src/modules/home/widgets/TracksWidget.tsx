@@ -128,7 +128,11 @@ const TracksWidget: React.FC<Props> = ({
       : items.slice(0, limit ?? maxItems);
 
   const handlePlayTrack = (trackId: string, url: string) => {
-    audioManager.toggle(trackId, url);
+    const track = visibleItems.find((t) => t.id === trackId);
+    audioManager.toggle(trackId, url, {
+      title: track?.title || 'Sin título',
+      artist: track?.interpreters || track?.author || track?.community || 'Imaginario',
+    });
     onItemClick?.(trackId);
   };
 

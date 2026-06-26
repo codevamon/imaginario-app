@@ -1,6 +1,7 @@
 // src/core/audio/player.ts
 // Robust AudioManager singleton: controla 1 <audio> global, normaliza URLs y maneja errores.
 import { NativeAudio } from '@capacitor-community/native-audio';
+import { NativeAudio as CapgoNativeAudio } from '@capgo/native-audio';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Network } from '@capacitor/network';
 import { Capacitor } from '@capacitor/core';
@@ -8,11 +9,24 @@ import { App } from '@capacitor/app';
 import { mediaCacheService, ensureCachedMedia } from '../cache/mediaCacheService';
 import { revalidateAudio } from '../hooks/useAudioVerification';
 
+// PoC: permitir reproducción en segundo plano (solo desactiva autopause por background)
+const BACKGROUND_AUDIO_ENABLED = true;
+
+// Experimental: Capgo muestra notificación nativa, pero actualmente rompe background/progreso.
+// Mantener false hasta integrar foreground service/progreso nativo completo.
+const USE_CAPGO_NATIVE_AUDIO = false;
+
 // 🔒 Previene autopause en el primer tap al entrar a una vista
 let allowAutoPause = true;
 
 // Marca el momento en que comenzó la última reproducción real
 let lastPlaybackStartedAt: number | null = null;
+
+export type AudioPlayMetadata = {
+  title?: string;
+  artist?: string;
+  artworkUrl?: string;
+};
 
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
@@ -259,6 +273,32 @@ async function prepareSource(originalSrc: string, id: string): Promise<string> {
   }
 }
 
+let capgoConfigured = false;
+
+async function ensureCapgoConfigured(): Promise<boolean> {
+  if (capgoConfigured) return true;
+  try {
+    await CapgoNativeAudio.configure({
+      focus: true,
+      showNotification: true,
+      background: true,
+    });
+    capgoConfigured = true;
+    return true;
+  } catch (e) {
+    capgoConfigured = false;
+    console.warn('[AudioManager] ensureCapgoConfigured failed:', e);
+    return false;
+  }
+}
+
+function mapCapgoMetadata(metadata?: AudioPlayMetadata, id?: string) {
+  return {
+    title: metadata?.title || id || 'Imaginario',
+    artist: metadata?.artist || 'Imaginario',
+  };
+}
+
 class AudioManager {
   private audio: HTMLAudioElement | null = null;
   private playingId: string | null = null;
@@ -274,7 +314,18 @@ class AudioManager {
   private nativeAudioStartTime: number = 0;
   private nativeAudioDuration: number = 0;
   private isUsingNativeAudio: boolean = false;
+  private isUsingCapgoNative: boolean = false;
+  private capgoPaused = false;
+  private lastCapgoAssetId: string | null = null;
+  private capgoDuration = 0;
+  private capgoCurrentTime = 0;
+  private capgoCurrentTimeListener: any = null;
+  private capgoCompleteListener: any = null;
+  private isStartingCapgoNative = false;
   public lastPathname: string = '';
+  private currentMetadata: AudioPlayMetadata | null = null;
+  private lastPlayId: string | null = null;
+  private lastPlaySrc: string | null = null;
 
   private startProgressLoop() {
     if (this.animationFrameId) {
@@ -334,7 +385,14 @@ class AudioManager {
   }
 
   private setProgress(currentTime: number) {
-    const duration = this.isUsingNativeAudio ? this.nativeAudioDuration : (this.audio?.duration || 0);
+    let duration: number;
+    if (this.isUsingCapgoNative || this.capgoPaused) {
+      duration = this.capgoDuration;
+    } else if (this.isUsingNativeAudio) {
+      duration = this.nativeAudioDuration;
+    } else {
+      duration = this.audio?.duration || 0;
+    }
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
     // Emitir eventos de progreso
@@ -378,7 +436,7 @@ class AudioManager {
       if (currentTime >= this.nativeAudioDuration) {
         clearInterval(this.progressTimer);
         this.progressTimer = null;
-        this.setPlaying(null);
+        this.setPlaying(null, { endOfTrack: true });
         this.setProgress(0);
       }
     }, 250);
@@ -433,10 +491,124 @@ class AudioManager {
     }
   }
 
-  async play(id: string, src?: string) {
+  private async cleanupCapgoListeners(): Promise<void> {
+    if (this.capgoCurrentTimeListener) {
+      await this.capgoCurrentTimeListener.remove().catch(() => {});
+      this.capgoCurrentTimeListener = null;
+    }
+    if (this.capgoCompleteListener) {
+      await this.capgoCompleteListener.remove().catch(() => {});
+      this.capgoCompleteListener = null;
+    }
+  }
+
+  private async setupCapgoProgress(assetId: string): Promise<void> {
+    await this.cleanupCapgoListeners();
+    try {
+      const durationResult = await CapgoNativeAudio.getDuration({ assetId });
+      this.capgoDuration = durationResult?.duration || 0;
+      if (this.capgoDuration === 0) {
+        console.warn('[AudioManager] Capgo getDuration returned 0 for:', assetId);
+      }
+    } catch (e) {
+      console.warn('[AudioManager] Capgo getDuration failed:', e);
+      this.capgoDuration = 0;
+    }
+
+    this.capgoCurrentTimeListener = await CapgoNativeAudio.addListener('currentTime', (event: any) => {
+      if (event?.assetId !== this.lastCapgoAssetId) return;
+      this.capgoCurrentTime = event.currentTime || 0;
+      this.setProgress(this.capgoCurrentTime);
+    });
+
+    this.capgoCompleteListener = await CapgoNativeAudio.addListener('complete', (event: any) => {
+      if (event?.assetId !== this.lastCapgoAssetId) return;
+      this.capgoCurrentTime = 0;
+      this.capgoDuration = 0;
+      this.capgoPaused = false;
+      this.isUsingCapgoNative = false;
+      this.setPlaying(null, { endOfTrack: true });
+    });
+
+    this.setProgress(0);
+  }
+
+  private async stopCurrentCapgoTrack(reason?: string): Promise<void> {
+    if (!this.isUsingCapgoNative || !this.playingId) return;
+    const previousId = this.playingId;
+    await CapgoNativeAudio.stop({ assetId: previousId }).catch(() => {});
+    await CapgoNativeAudio.unload({ assetId: previousId }).catch(() => {});
+    await this.cleanupCapgoListeners();
+    this.capgoDuration = 0;
+    this.capgoCurrentTime = 0;
+    console.log('[AudioManager] stopped previous Capgo track:', previousId, reason ?? '');
+    this.isUsingCapgoNative = false;
+    this.capgoPaused = false;
+  }
+
+  private async resumeCapgoTrack(assetId: string): Promise<boolean> {
+    try {
+      await CapgoNativeAudio.resume({ assetId });
+      this.capgoPaused = false;
+      this.setPlaying(assetId);
+      if (!this.capgoCurrentTimeListener) {
+        await this.setupCapgoProgress(assetId);
+      }
+      console.log('[AudioManager] resumed Capgo');
+      return true;
+    } catch (e) {
+      console.warn('[AudioManager] resume Capgo failed:', e);
+      return false;
+    }
+  }
+
+  private async playViaCapgoNative(
+    id: string,
+    playbackSrc: string,
+    metadata?: AudioPlayMetadata
+  ): Promise<boolean> {
+    try {
+      if (!(await ensureCapgoConfigured())) return false;
+      this.isStartingCapgoNative = true;
+      await this.stopCurrentCapgoTrack('before new Capgo play');
+      const capgo = CapgoNativeAudio as any;
+      await capgo.unload({ assetId: id }).catch(() => {});
+      await capgo.preload({
+        assetId: id,
+        assetPath: playbackSrc,
+        isUrl: true,
+        notificationMetadata: mapCapgoMetadata(metadata, id),
+      });
+      await capgo.play({ assetId: id });
+      lastPlaybackStartedAt = Date.now();
+      this.isUsingCapgoNative = true;
+      this.capgoPaused = false;
+      this.lastCapgoAssetId = id;
+      this.setPlaying(id);
+      this.setLoading(null);
+      await this.setupCapgoProgress(id);
+      console.log('[AudioManager] Capgo playing:', id, 'from:', playbackSrc);
+      return true;
+    } catch (err) {
+      console.warn('[AudioManager] Capgo native failed, falling back:', err);
+      this.isUsingCapgoNative = false;
+      return false;
+    } finally {
+      this.isStartingCapgoNative = false;
+    }
+  }
+
+  async play(id: string, src?: string, metadata?: AudioPlayMetadata) {
     if (!id || !src) {
       console.warn('[AudioManager] play called with missing id or src:', { id, src });
       return;
+    }
+
+    setupMediaSession();
+    this.lastPlayId = id;
+    this.lastPlaySrc = src;
+    if (metadata) {
+      this.currentMetadata = metadata;
     }
 
     // Limpiar cualquier timer anterior
@@ -465,6 +637,8 @@ class AudioManager {
     } else {
       console.log('[AudioManager] 🌐 Usando fuente remota:', src);
     }
+
+    const capgoNativeSrc = src.startsWith('file://') ? src : null;
 
     // 🩵 Interceptar audios locales y convertirlos a URL segura para reproducción offline
     if (src.startsWith('file://')) {
@@ -521,8 +695,24 @@ class AudioManager {
     const urlExists = await this.checkUrlExists(normalizedSrc);
     if (!urlExists) {
       console.warn('[AudioManager] URL not found (404):', normalizedSrc);
-      this.setPlaying(null);
+      this.setPlaying(null, { endOfTrack: true });
       return;
+    }
+
+    if (
+      USE_CAPGO_NATIVE_AUDIO &&
+      Capacitor.isNativePlatform() &&
+      Capacitor.getPlatform() === 'android' &&
+      this.playingId !== id
+    ) {
+      const playbackSrc = capgoNativeSrc
+        ?? (normalizedSrc.startsWith('http')
+          ? normalizedSrc
+          : Capacitor.convertFileSrc(normalizedSrc));
+      console.log('[AudioManager] Capgo native src:', playbackSrc);
+      if (await this.playViaCapgoNative(id, playbackSrc, metadata)) {
+        return;
+      }
     }
 
     // Detectar si es un archivo local (file:// o capacitor://) y decidir si usar NativeAudio o HTMLAudioElement
@@ -595,6 +785,7 @@ class AudioManager {
           clearInterval(this.progressTimer);
           this.progressTimer = null;
         }
+        setMediaSessionPaused();
         this.setPlaying(null);
         console.log('[AudioManager] paused NativeAudio track:', id);
       } else if (this.audio && !this.audio.paused) {
@@ -604,6 +795,7 @@ class AudioManager {
           this.progressTimer = null;
         }
         this.stopProgressLoop();
+        setMediaSessionPaused();
         this.setPlaying(null);
         console.log('[AudioManager] paused current track:', id);
       } else if (this.audio) {
@@ -643,10 +835,10 @@ class AudioManager {
             // Para resume, necesitamos obtener la URL original del track actual
             // Como no tenemos acceso directo a originalSrc aquí, solo logueamos el error
             console.warn('[AudioManager] ⚠️ No se puede reparar automáticamente en resume sin URL original');
-            this.setPlaying(null);
+            this.setPlaying(null, { endOfTrack: true });
           } else {
             console.error('[AudioManager] Reproducción falló por otra causa (resume):', err);
-            this.setPlaying(null);
+            this.setPlaying(null, { endOfTrack: true });
           }
         }
       }
@@ -712,7 +904,7 @@ class AudioManager {
         if (verErr instanceof Error && verErr.message === 'Archivo corrupto eliminado antes de reproducir') {
           // Archivo corrupto eliminado, continuar sin reproducir
           this.setLoading(null);
-          this.setPlaying(null);
+          this.setPlaying(null, { endOfTrack: true });
           return;
         }
         console.warn('[AudioManager] Verificación de archivo local falló:', verErr);
@@ -746,7 +938,7 @@ class AudioManager {
       }
       this.setProgress(0);
       this.stopProgressLoop();
-      this.setPlaying(null);
+      this.setPlaying(null, { endOfTrack: true });
     };
     
     this.audio.onerror = async (e) => {
@@ -776,7 +968,7 @@ class AudioManager {
         this.progressTimer = null;
       }
       this.stopProgressLoop();
-      this.setPlaying(null);
+      this.setPlaying(null, { endOfTrack: true });
       this.setLoading(null); // Limpiar loading en caso de error
     };
 
@@ -869,13 +1061,13 @@ class AudioManager {
           } else {
             console.warn('[AudioManager] ❌ Sin conexión, no se puede reparar archivo corrupto');
             this.setRepairing(null);
-            this.setPlaying(null);
+            this.setPlaying(null, { endOfTrack: true });
             this.setLoading(null);
           }
         } catch (repairErr) {
           console.error('[AudioManager] 🚫 Fallo en la reparación automática:', repairErr);
           this.setRepairing(null);
-          this.setPlaying(null);
+          this.setPlaying(null, { endOfTrack: true });
           this.setLoading(null);
         }
       } else {
@@ -890,6 +1082,18 @@ class AudioManager {
 
   pause() {
     this.setLoading(null); // Limpiar loading al pausar
+    if (this.isUsingCapgoNative && this.playingId) {
+      const assetId = this.playingId;
+      void CapgoNativeAudio.pause({ assetId }).catch((e) => {
+        console.warn('[AudioManager] pause Capgo failed:', e);
+      });
+      this.capgoPaused = true;
+      setMediaSessionPaused();
+      this.setPlaying(null);
+      console.log('[AudioManager] paused Capgo');
+      return;
+    }
+    setMediaSessionPaused();
     if (this.isUsingNativeAudio) {
       try {
         // Para NativeAudio, solo detener el timer
@@ -922,15 +1126,27 @@ class AudioManager {
     }
   }
 
-  toggle(id: string, src?: string) {
+  toggle(id: string, src?: string, metadata?: AudioPlayMetadata) {
+    if (USE_CAPGO_NATIVE_AUDIO && this.capgoPaused && this.lastCapgoAssetId === id) {
+      void this.resumeCapgoTrack(id);
+      return;
+    }
+    if (USE_CAPGO_NATIVE_AUDIO && this.isUsingCapgoNative && this.playingId === id) {
+      this.pause();
+      return;
+    }
     if (this.playingId === id) {
       this.pause();
     } else {
-      this.play(id, src);
+      void this.play(id, src, metadata);
     }
   }
 
   getPlayingId() { return this.playingId; }
+
+  isCapgoStarting(): boolean {
+    return this.isStartingCapgoNative;
+  }
 
   isPlaying(): boolean {
     return this.playingId !== null;
@@ -961,6 +1177,9 @@ class AudioManager {
   getRepairingId() { return this.repairingId; }
 
   getCurrentTime(): number {
+    if (this.isUsingCapgoNative || this.capgoPaused) {
+      return this.capgoCurrentTime;
+    }
     if (this.isUsingNativeAudio) {
       const elapsed = (Date.now() - this.nativeAudioStartTime) / 1000;
       return Math.min(elapsed, this.nativeAudioDuration);
@@ -969,6 +1188,9 @@ class AudioManager {
   }
 
   getDuration(): number {
+    if (this.isUsingCapgoNative || this.capgoPaused) {
+      return this.capgoDuration;
+    }
     if (this.isUsingNativeAudio) {
       return this.nativeAudioDuration;
     }
@@ -976,13 +1198,21 @@ class AudioManager {
   }
 
   getProgress(): number {
+    if (this.isUsingCapgoNative || this.capgoPaused) {
+      return this.capgoDuration > 0 ? (this.capgoCurrentTime / this.capgoDuration) * 100 : 0;
+    }
     const currentTime = this.getCurrentTime();
     const duration = this.getDuration();
     return duration > 0 ? (currentTime / duration) * 100 : 0;
   }
 
-  private setPlaying(id: string | null) {
+  private setPlaying(id: string | null, options?: { endOfTrack?: boolean }) {
     this.playingId = id;
+    if (id) {
+      updateMediaSession(this.currentMetadata ?? undefined);
+    } else if (options?.endOfTrack) {
+      clearMediaSession();
+    }
     this.cbs.forEach(cb => {
       try { cb(this.playingId); } catch (e) {
         console.warn('[AudioManager] onChange callback failed:', e);
@@ -1039,6 +1269,89 @@ class AudioManager {
 
 export const audioManager = new AudioManager();
 
+let mediaSessionSetupDone = false;
+
+function setMediaSessionPaused() {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  try {
+    (navigator.mediaSession as any).playbackState = 'paused';
+  } catch (e) {
+    console.warn('[AudioManager] setMediaSessionPaused failed:', e);
+  }
+}
+
+function updateMediaSession(metadata?: AudioPlayMetadata) {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  try {
+    const MediaMetadataCtor = (globalThis as any).MediaMetadata;
+    if (!MediaMetadataCtor) return;
+    const id = audioManager.getPlayingId();
+    (navigator.mediaSession as any).metadata = new MediaMetadataCtor({
+      title: metadata?.title || id || 'Imaginario',
+      artist: metadata?.artist || 'Imaginario',
+      artwork: metadata?.artworkUrl ? [{ src: metadata.artworkUrl }] : [],
+    });
+    (navigator.mediaSession as any).playbackState = 'playing';
+  } catch (e) {
+    console.warn('[AudioManager] updateMediaSession failed:', e);
+  }
+}
+
+function clearMediaSession() {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  try {
+    const ms = navigator.mediaSession as any;
+    ms.metadata = null;
+    ms.playbackState = 'none';
+  } catch (e) {
+    console.warn('[AudioManager] clearMediaSession failed:', e);
+  }
+}
+
+function setupMediaSession() {
+  if (mediaSessionSetupDone) return;
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+
+  try {
+    const ms = navigator.mediaSession as any;
+
+    ms.setActionHandler('pause', () => {
+      audioManager.pause();
+    });
+
+    ms.setActionHandler('play', () => {
+      void (async () => {
+        const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
+        if (audio?.src && audio.paused) {
+          try {
+            await audio.play();
+            const lastId = (audioManager as any).lastPlayId as string | null;
+            if (lastId) {
+              (audioManager as any).setPlaying(lastId);
+            } else {
+              (navigator.mediaSession as any).playbackState = 'playing';
+            }
+          } catch (e) {
+            console.warn('[AudioManager] mediaSession play handler failed:', e);
+          }
+          return;
+        }
+
+        const lastId = (audioManager as any).lastPlayId as string | null;
+        const lastSrc = (audioManager as any).lastPlaySrc as string | null;
+        const meta = (audioManager as any).currentMetadata as AudioPlayMetadata | null;
+        if (lastId && lastSrc) {
+          await audioManager.play(lastId, lastSrc, meta ?? undefined);
+        }
+      })();
+    });
+
+    mediaSessionSetupDone = true;
+  } catch (e) {
+    console.warn('[AudioManager] setupMediaSession failed:', e);
+  }
+}
+
 // 🧭 Pausar audio automáticamente en cambios de página o visibilidad
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const pauseIfPlaying = () => {
@@ -1061,6 +1374,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         // ⛔ Evitar autopausa en el primer tap después de montar la vista
         if (!allowAutoPause) {
           console.log("[AudioManager] ⏸️ Ignorando autopause inicial (primer tap safe)");
+          return;
+        }
+        if (audioManager.isCapgoStarting()) {
+          console.log('[AudioManager] ⏸️ Autopause ignorada: Capgo iniciando');
           return;
         }
         audioManager.pause();
@@ -1094,6 +1411,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     // Solo pausar si realmente la app se fue a background
     if (document.visibilityState === 'hidden') {
+      if (BACKGROUND_AUDIO_ENABLED) {
+        console.log('[AudioManager] Background audio enabled - skipping autopause');
+        return;
+      }
       pauseIfPlaying();
     }
   });
@@ -1110,6 +1431,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         return;
       }
 
+      if (BACKGROUND_AUDIO_ENABLED) {
+        console.log('[AudioManager] Background audio enabled - skipping autopause');
+        return;
+      }
+
       pauseIfPlaying();
     });
   } catch (err) {
@@ -1123,28 +1449,43 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     // Cuando cambia la ruta interna de Ionic / React Router
     window.addEventListener('ionRouteWillChange', () => {
-      pauseIfPlaying(); // Pausar primero si está reproduciendo
-      resetAutoPauseFlag(); // Luego resetear flag para proteger primer tap en nueva vista
+      const prevPath = audioManager.lastPathname;
+      const currentPath = window.location.pathname;
+      audioManager.lastPathname = currentPath;
+      if (prevPath !== currentPath) {
+        pauseIfPlaying();
+        resetAutoPauseFlag();
+      }
     });
 
     // También cubrir navegación directa por React Router (push, back, forward)
     window.addEventListener('popstate', () => {
-      pauseIfPlaying(); // Pausar primero si está reproduciendo
-      resetAutoPauseFlag(); // Luego resetear flag para proteger primer tap en nueva vista
+      const prevPath = audioManager.lastPathname;
+      const currentPath = window.location.pathname;
+      audioManager.lastPathname = currentPath;
+      if (prevPath !== currentPath) {
+        pauseIfPlaying();
+        resetAutoPauseFlag();
+      }
     });
 
     // Monitor global de cambios de URL con MutationObserver (fallback en caso de router.push interno)
     const observer = new MutationObserver(() => {
       const currentPath = window.location.pathname;
-      if (audioManager?.isPlaying() && currentPath !== audioManager?.lastPathname) {
-        // ⛔ Evitar autopausa en el primer tap después de montar la vista
-        if (!allowAutoPause) {
-          console.log("[AudioManager] ⏸️ Ignorando cambio DOM inicial (primer tap safe)");
-          return;
-        }
-        pauseIfPlaying(); // Pausar primero si está reproduciendo
-        resetAutoPauseFlag(); // Luego resetear flag para proteger primer tap en nueva vista
-        audioManager.lastPathname = currentPath;
+      if (currentPath === audioManager.lastPathname) return;
+
+      audioManager.lastPathname = currentPath;
+      if (audioManager.isCapgoStarting()) {
+        console.log('[AudioManager] ⏸️ Ignorando MutationObserver: Capgo iniciando');
+        return;
+      }
+      if (!allowAutoPause) {
+        console.log("[AudioManager] ⏸️ Ignorando cambio DOM inicial (primer tap safe)");
+        return;
+      }
+      if (audioManager.isPlaying()) {
+        pauseIfPlaying();
+        resetAutoPauseFlag();
       }
     });
 
