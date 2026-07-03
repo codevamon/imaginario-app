@@ -6,6 +6,11 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Network } from '@capacitor/network';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import {
+  NativeMediaControls,
+  type NativeMediaMetadata,
+  type NativePlaybackState,
+} from '@imaginario/native-media-controls';
 import { mediaCacheService, ensureCachedMedia } from '../cache/mediaCacheService';
 import { revalidateAudio } from '../hooks/useAudioVerification';
 
@@ -16,8 +21,118 @@ const BACKGROUND_AUDIO_ENABLED = true;
 // Mantener false hasta integrar foreground service/progreso nativo completo.
 const USE_CAPGO_NATIVE_AUDIO = false;
 
+// Experimental: community NativeAudio queda desactivado para evitar crashes iOS con capacitor://
+// y mantener HTMLAudioElement como motor único.
+const USE_COMMUNITY_NATIVE_AUDIO = false;
+
+const USE_NATIVE_MEDIA_CONTROLS = true;
+
 // 🔒 Previene autopause en el primer tap al entrar a una vista
 let allowAutoPause = true;
+
+let nativeMediaControlsConfigured = false;
+let lastNativePositionSyncAt = 0;
+
+const canUseNativeMediaControls = () =>
+  USE_NATIVE_MEDIA_CONTROLS && Capacitor.isNativePlatform();
+
+async function ensureNativeMediaControlsConfigured(): Promise<void> {
+  if (!canUseNativeMediaControls()) return;
+  if (nativeMediaControlsConfigured) return;
+  console.log('[AudioManager][NativeBridge] configure');
+  await NativeMediaControls.configure({
+    showNotification: true,
+    channelId: 'imaginario_audio',
+    channelName: 'Imaginario Audio',
+  });
+  nativeMediaControlsConfigured = true;
+}
+
+function buildNativeMetadata(
+  id: string,
+  metadata?: AudioPlayMetadata,
+  duration?: number
+): NativeMediaMetadata {
+  return {
+    id,
+    title: metadata?.title || id || 'Imaginario',
+    artist: metadata?.artist || 'Imaginario',
+    artworkUrl: metadata?.artworkUrl,
+    duration,
+  };
+}
+
+async function nativeSetMetadata(
+  id: string,
+  metadata?: AudioPlayMetadata,
+  duration?: number
+): Promise<void> {
+  if (!canUseNativeMediaControls()) return;
+  try {
+    await ensureNativeMediaControlsConfigured();
+    const payload = buildNativeMetadata(id, metadata, duration);
+    console.log('[AudioManager][NativeBridge] setMetadata', payload);
+    await NativeMediaControls.setMetadata(payload);
+  } catch (e) {
+    console.warn('[AudioManager] nativeSetMetadata failed:', e);
+  }
+}
+
+async function nativeSetPlaybackState(state: NativePlaybackState): Promise<void> {
+  if (!canUseNativeMediaControls()) return;
+  try {
+    await ensureNativeMediaControlsConfigured();
+    console.log('[AudioManager][NativeBridge] setPlaybackState', { state });
+    await NativeMediaControls.setPlaybackState({ state });
+  } catch (e) {
+    console.warn('[AudioManager] nativeSetPlaybackState failed:', e);
+  }
+}
+
+async function nativeSetPosition(
+  position: number,
+  duration?: number,
+  playbackRate = 1
+): Promise<void> {
+  if (!canUseNativeMediaControls()) return;
+  const force = playbackRate === 0;
+  if (!force) {
+    const now = Date.now();
+    if (now - lastNativePositionSyncAt < 1000) return;
+  }
+  lastNativePositionSyncAt = Date.now();
+  try {
+    await ensureNativeMediaControlsConfigured();
+    console.log('[AudioManager][NativeBridge] setPosition', { position, duration, playbackRate });
+    await NativeMediaControls.setPosition({ position, duration, playbackRate });
+  } catch (e) {
+    console.warn('[AudioManager] nativeSetPosition failed:', e);
+  }
+}
+
+async function nativeClear(): Promise<void> {
+  if (!canUseNativeMediaControls()) return;
+  try {
+    await ensureNativeMediaControlsConfigured();
+    console.log('[AudioManager][NativeBridge] clear');
+    await NativeMediaControls.clear();
+  } catch (e) {
+    console.warn('[AudioManager] nativeClear failed:', e);
+  }
+}
+
+function scheduleDelayedNativeClear(): void {
+  setTimeout(() => {
+    const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
+    const currentPlayingId = audioManager.getPlayingId();
+    const audioStillActive = !!(audio && !audio.paused && !audio.ended);
+    if (currentPlayingId !== null || audioStillActive) {
+      console.log('[AudioManager] delayed nativeClear skipped: new playback active');
+      return;
+    }
+    void nativeClear();
+  }, 5000);
+}
 
 // Marca el momento en que comenzó la última reproducción real
 let lastPlaybackStartedAt: number | null = null;
@@ -394,6 +509,18 @@ class AudioManager {
       duration = this.audio?.duration || 0;
     }
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+    if (
+      canUseNativeMediaControls() &&
+      !this.isUsingCapgoNative &&
+      !this.capgoPaused &&
+      !this.isUsingNativeAudio &&
+      this.audio &&
+      !this.audio.paused &&
+      !this.audio.ended
+    ) {
+      void nativeSetPosition(currentTime, duration > 0 ? duration : undefined, 1);
+    }
     
     // Emitir eventos de progreso
     this.progressCbs.forEach(cb => {
@@ -472,6 +599,16 @@ class AudioManager {
       } catch (e) {
         console.warn('[AudioManager] Capacitor not available for file conversion:', e);
       }
+      return src;
+    }
+
+    // 🔹 URLs ya convertidas por Capacitor (evitar duplicar capacitor://localhost)
+    if (
+      src.startsWith('capacitor://') ||
+      src.includes('_capacitor_file_') ||
+      src.startsWith('https://localhost/_capacitor_file_') ||
+      src.startsWith('http://localhost/_capacitor_file_')
+    ) {
       return src;
     }
 
@@ -733,7 +870,7 @@ class AudioManager {
       }
     }
     
-    if (isLocal && useNative) {
+    if (USE_COMMUNITY_NATIVE_AUDIO && isLocal && useNative) {
       try {
         const fileName = src.split('/').pop() || 'cached-audio';
         console.log('[AudioManager] 🎧 Playing cached audio via NativeAudio:', src);
@@ -772,7 +909,11 @@ class AudioManager {
     } else {
       this.isUsingNativeAudio = false;
       if (isLocal) {
-        console.log('[AudioManager] 🎵 Using HTMLAudioElement for large file:', src);
+        if (!USE_COMMUNITY_NATIVE_AUDIO) {
+          console.log('[AudioManager] Native audio disabled - using HTML backend');
+        } else {
+          console.log('[AudioManager] 🎵 Using HTMLAudioElement for large file:', src);
+        }
       }
     }
 
@@ -789,6 +930,8 @@ class AudioManager {
         this.setPlaying(null);
         console.log('[AudioManager] paused NativeAudio track:', id);
       } else if (this.audio && !this.audio.paused) {
+        const currentTime = this.audio.currentTime || 0;
+        const duration = this.audio.duration || 0;
         this.audio.pause();
         if (this.progressTimer) {
           clearInterval(this.progressTimer);
@@ -796,6 +939,8 @@ class AudioManager {
         }
         this.stopProgressLoop();
         setMediaSessionPaused();
+        void nativeSetPlaybackState('paused');
+        void nativeSetPosition(currentTime, duration > 0 ? duration : undefined, 0);
         this.setPlaying(null);
         console.log('[AudioManager] paused current track:', id);
       } else if (this.audio) {
@@ -805,6 +950,8 @@ class AudioManager {
           // Registrar cuándo comenzó esta reproducción (para proteger los primeros ms)
           lastPlaybackStartedAt = Date.now();
           this.setPlaying(id);
+          void nativeSetMetadata(id, this.currentMetadata ?? undefined, this.audio?.duration);
+          void nativeSetPlaybackState('playing');
           console.log('[AudioManager] resumed track:', id);
         } catch (err: any) {
           console.warn('[AudioManager] ⚠️ Error de reproducción (resume):', err);
@@ -865,7 +1012,12 @@ class AudioManager {
 
     // crear o reutilizar audio element
     this.audio = this.audio ?? document.createElement('audio');
-    const finalSrc = normalizedSrc.startsWith('http') ? normalizedSrc : Capacitor.convertFileSrc(normalizedSrc);
+    const finalSrc =
+      normalizedSrc.startsWith('http') ||
+      normalizedSrc.startsWith('capacitor://') ||
+      normalizedSrc.includes('_capacitor_file_')
+        ? normalizedSrc
+        : Capacitor.convertFileSrc(normalizedSrc);
     
     // --- Verificación de archivo local corrupto antes de reproducir ---
     if (finalSrc.includes('_capacitor_file_') || finalSrc.startsWith('capacitor://localhost/_capacitor_file_') || finalSrc.startsWith('https://localhost/_capacitor_file_')) {
@@ -923,6 +1075,7 @@ class AudioManager {
       const duration = this.audio?.duration || 0;
       this.setDuration(duration);
       this.setProgress(0);
+      void nativeSetMetadata(id, this.currentMetadata ?? undefined, duration);
     };
     
     this.audio.ontimeupdate = () => {
@@ -938,36 +1091,75 @@ class AudioManager {
       }
       this.setProgress(0);
       this.stopProgressLoop();
+      void nativeSetPlaybackState('stopped');
+      scheduleDelayedNativeClear();
       this.setPlaying(null, { endOfTrack: true });
     };
     
     this.audio.onerror = async (e) => {
       console.warn('[AudioManager] audio error:', e, 'for src:', normalizedSrc);
-      
-      // Si el audio local falla en reproducirse, se elimina para reparación futura
-      if (this.audio?.src?.includes('_capacitor_file_') || this.audio?.src?.startsWith('capacitor://localhost/_capacitor_file_') || this.audio?.src?.startsWith('https://localhost/_capacitor_file_')) {
-        try {
-          let decodedPath = this.audio.src.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
-          decodedPath = decodeURIComponent(decodedPath);
-          const relativePath = decodedPath.indexOf('imaginario/') !== -1 
-            ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
-            : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
-          
-          await Filesystem.deleteFile({
-            path: relativePath,
-            directory: Directory.Data,
-          });
-          console.warn('[AudioManager] 🧹 Archivo local eliminado por error de reproducción:', relativePath);
-        } catch (delErr) {
-          console.warn('[AudioManager] No se pudo eliminar archivo corrupto:', delErr);
+
+      const audioSrc = this.audio?.src ?? '';
+      const isLocalPlayback =
+        audioSrc.includes('_capacitor_file_') ||
+        audioSrc.startsWith('capacitor://localhost/_capacitor_file_') ||
+        audioSrc.startsWith('https://localhost/_capacitor_file_');
+
+      if (isLocalPlayback) {
+        let deletedCorruptFile = false;
+
+        if (!audioSrc.includes('capacitor://localhost/capacitor://localhost')) {
+          try {
+            let decodedPath = audioSrc
+              .replace('file://', '')
+              .replace('capacitor://localhost/_capacitor_file_', '')
+              .replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
+            decodedPath = decodeURIComponent(decodedPath);
+            decodedPath = decodedPath.replace(/^\/data\/user\/0\/[^/]+\/files\//, '');
+
+            let relativePath: string | null = null;
+            const imaginarioIndex = decodedPath.indexOf('imaginario/');
+            if (imaginarioIndex !== -1) {
+              relativePath = decodedPath.substring(imaginarioIndex);
+            } else {
+              const fileName = decodedPath.split('/').pop() || '';
+              if (fileName) {
+                relativePath = `imaginario/audio/${fileName}`;
+              }
+            }
+
+            if (relativePath?.startsWith('imaginario/')) {
+              const stat = await Filesystem.stat({
+                path: relativePath,
+                directory: Directory.Data,
+              }).catch(() => null);
+
+              if (stat && (stat.size ?? 0) < 10240) {
+                await Filesystem.deleteFile({
+                  path: relativePath,
+                  directory: Directory.Data,
+                });
+                deletedCorruptFile = true;
+                console.warn('[AudioManager] 🧹 Archivo local eliminado por corrupción (<10KB):', relativePath);
+              }
+            }
+          } catch (delErr) {
+            console.warn('[AudioManager] No se pudo verificar archivo local tras error:', delErr);
+          }
+        }
+
+        if (!deletedCorruptFile) {
+          console.warn('[AudioManager] Local file kept after playback error; URL may be invalid');
         }
       }
-      
+
       if (this.progressTimer) {
         clearInterval(this.progressTimer);
         this.progressTimer = null;
       }
       this.stopProgressLoop();
+      void nativeSetPlaybackState('stopped');
+      void nativeClear();
       this.setPlaying(null, { endOfTrack: true });
       this.setLoading(null); // Limpiar loading en caso de error
     };
@@ -997,6 +1189,8 @@ class AudioManager {
       // Registrar cuándo comenzó esta reproducción (para proteger los primeros ms)
       lastPlaybackStartedAt = Date.now();
       this.setPlaying(id);
+      void nativeSetMetadata(id, this.currentMetadata ?? undefined, this.audio?.duration);
+      void nativeSetPlaybackState('playing');
       this.setLoading(null); // Finalizar loading cuando comienza a reproducir
       console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
     } catch (err: any) {
@@ -1057,6 +1251,8 @@ class AudioManager {
             
             this.setRepairing(null); // Finalizar reparación
             this.setPlaying(id);
+            void nativeSetMetadata(id, this.currentMetadata ?? undefined, this.audio?.duration);
+            void nativeSetPlaybackState('playing');
             this.setLoading(null);
           } else {
             console.warn('[AudioManager] ❌ Sin conexión, no se puede reparar archivo corrupto');
@@ -1113,12 +1309,16 @@ class AudioManager {
     
     if (!this.audio) return;
     try {
+      const currentTime = this.audio.currentTime || 0;
+      const duration = this.audio.duration || 0;
       this.audio.pause();
       if (this.progressTimer) {
         clearInterval(this.progressTimer);
         this.progressTimer = null;
       }
       this.stopProgressLoop();
+      void nativeSetPlaybackState('paused');
+      void nativeSetPosition(currentTime, duration > 0 ? duration : undefined, 0);
       this.setPlaying(null);
       console.log('[AudioManager] paused');
     } catch (e) {
