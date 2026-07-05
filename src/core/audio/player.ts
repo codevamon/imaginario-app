@@ -31,13 +31,88 @@ const USE_NATIVE_MEDIA_CONTROLS = true;
 let allowAutoPause = true;
 
 let nativeMediaControlsConfigured = false;
+let nativeMediaControlsListenersRegistered = false;
 let lastNativePositionSyncAt = 0;
 
 const canUseNativeMediaControls = () =>
   USE_NATIVE_MEDIA_CONTROLS && Capacitor.isNativePlatform();
 
+async function handleNativeMediaPlay(): Promise<void> {
+  const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
+
+  if (
+    audioManager.getPlayingId() !== null &&
+    audio &&
+    !audio.paused &&
+    !audio.ended
+  ) {
+    console.log('[AudioManager][NativeBridge] nativeMediaPlay skipped: already playing');
+    return;
+  }
+
+  if (audio?.src && audio.paused && !audio.ended) {
+    try {
+      await audio.play();
+      const lastId = (audioManager as any).lastPlayId as string | null;
+      if (lastId) {
+        (audioManager as any).setPlaying(lastId);
+      }
+      void nativeSetPlaybackState('playing');
+      return;
+    } catch (e) {
+      console.warn('[AudioManager][NativeBridge] nativeMediaPlay resume failed:', e);
+    }
+  }
+
+  const lastId = (audioManager as any).lastPlayId as string | null;
+  const lastSrc = (audioManager as any).lastPlaySrc as string | null;
+  const meta = (audioManager as any).currentMetadata as AudioPlayMetadata | null;
+  if (lastId && lastSrc) {
+    await audioManager.play(lastId, lastSrc, meta ?? undefined);
+    return;
+  }
+
+  console.log('[AudioManager][NativeBridge] nativeMediaPlay skipped: no paused audio');
+}
+
+function handleNativeMediaPause(): void {
+  const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
+  if (audioManager.getPlayingId() === null && (!audio || audio.paused || audio.ended)) {
+    console.log('[AudioManager][NativeBridge] nativeMediaPause skipped: already paused');
+    return;
+  }
+  audioManager.pause();
+}
+
+function handleNativeMediaStop(): void {
+  audioManager.pause();
+  void nativeClear();
+}
+
+function setupNativeMediaControlsListeners(): void {
+  if (!canUseNativeMediaControls()) return;
+  if (nativeMediaControlsListenersRegistered) return;
+  nativeMediaControlsListenersRegistered = true;
+
+  void NativeMediaControls.addListener('nativeMediaPlay', () => {
+    console.log('[AudioManager][NativeBridge] nativeMediaPlay');
+    void handleNativeMediaPlay();
+  });
+
+  void NativeMediaControls.addListener('nativeMediaPause', () => {
+    console.log('[AudioManager][NativeBridge] nativeMediaPause');
+    handleNativeMediaPause();
+  });
+
+  void NativeMediaControls.addListener('nativeMediaStop', () => {
+    console.log('[AudioManager][NativeBridge] nativeMediaStop');
+    handleNativeMediaStop();
+  });
+}
+
 async function ensureNativeMediaControlsConfigured(): Promise<void> {
   if (!canUseNativeMediaControls()) return;
+  setupNativeMediaControlsListeners();
   if (nativeMediaControlsConfigured) return;
   console.log('[AudioManager][NativeBridge] configure');
   await NativeMediaControls.configure({
