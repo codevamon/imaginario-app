@@ -2,7 +2,17 @@ import type { Plugin, PluginListenerHandle } from '@capacitor/core';
 
 export type NativePlaybackState = 'none' | 'playing' | 'paused' | 'stopped';
 
-export type NativeMediaEvent = 'nativeMediaPlay' | 'nativeMediaPause' | 'nativeMediaStop';
+export type NativeMediaEvent =
+  | 'nativeMediaPlay'
+  | 'nativeMediaPause'
+  | 'nativeMediaStop'
+  | 'nativeMediaSeekTo'
+  | 'nativeMediaPrevious'
+  | 'nativeMediaNext';
+
+export interface NativeMediaSeekEvent {
+  position: number; // segundos
+}
 
 export interface NativeMediaMetadata {
   id?: string;
@@ -32,7 +42,11 @@ export interface NativeMediaControlsPlugin extends Plugin {
   setPosition(options: NativeMediaPosition): Promise<void>;
   clear(): Promise<void>;
   addListener(
-    eventName: NativeMediaEvent,
+    eventName: 'nativeMediaSeekTo',
+    listenerFunc: (event: NativeMediaSeekEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: Exclude<NativeMediaEvent, 'nativeMediaSeekTo'>,
     listenerFunc: () => void
   ): Promise<PluginListenerHandle>;
 }

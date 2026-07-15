@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
@@ -258,6 +259,25 @@ public class MediaPlaybackService extends Service {
                     Log.d(TAG, "onStop");
                     NativeMediaControlsPlugin.emitNativeMediaStop();
                 }
+
+                @Override
+                public void onSeekTo(long positionMs) {
+                    double positionSeconds = positionMs / 1000.0;
+                    Log.d(TAG, "onSeekTo positionMs=" + positionMs);
+                    NativeMediaControlsPlugin.emitNativeMediaSeekTo(positionSeconds);
+                }
+
+                @Override
+                public void onSkipToPrevious() {
+                    Log.d(TAG, "onSkipToPrevious");
+                    NativeMediaControlsPlugin.emitNativeMediaPrevious();
+                }
+
+                @Override
+                public void onSkipToNext() {
+                    Log.d(TAG, "onSkipToNext");
+                    NativeMediaControlsPlugin.emitNativeMediaNext();
+                }
             }
         );
         mediaSession.setActive(true);
@@ -358,19 +378,45 @@ public class MediaPlaybackService extends Service {
                 break;
         }
 
+        String metaTitle;
+        String metaArtist;
+        long durationMs;
         long positionMs;
         float speed;
         synchronized (LOCK) {
+            metaTitle = title != null && !title.isEmpty() ? title : "Imaginario";
+            metaArtist = artist != null ? artist : "";
+            durationMs = (long) (durationSec * 1000L);
             positionMs = (long) (positionSec * 1000L);
             speed = (float) playbackRate;
         }
+
+        MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, metaTitle)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, metaArtist);
+        if (durationMs > 0) {
+            metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs);
+        }
+        mediaSession.setMetadata(metadataBuilder.build());
+        Log.d(
+            TAG,
+            "metadata set title="
+                + metaTitle
+                + " artist="
+                + metaArtist
+                + " durationMs="
+                + durationMs
+        );
 
         PlaybackStateCompat playbackStateCompat = new PlaybackStateCompat.Builder()
             .setActions(
                 PlaybackStateCompat.ACTION_PLAY |
                 PlaybackStateCompat.ACTION_PAUSE |
                 PlaybackStateCompat.ACTION_STOP |
-                PlaybackStateCompat.ACTION_PLAY_PAUSE
+                PlaybackStateCompat.ACTION_PLAY_PAUSE |
+                PlaybackStateCompat.ACTION_SEEK_TO |
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT
             )
             .setState(sessionState, positionMs, speed)
             .build();

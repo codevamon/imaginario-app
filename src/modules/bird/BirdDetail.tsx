@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -22,6 +22,12 @@ import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
 import { listMusicians, type Musician } from '../../core/db/dao/musicians';
 import { setLocalFavorite, isFavLocal } from '../../core/db/dao/catalog';
 import { audioManager } from '../../core/audio/player';
+import {
+  buildSingsQueue,
+  buildTracksQueue,
+  buildInterviewsQueue,
+  combineAudioQueues,
+} from '../../core/audio/buildAudioQueue';
 import { getImagesByBirdId, type BirdImage } from '../../core/db/dao/bird_images';
 import { getSingsByBirdId, type Sing } from '../../core/db/dao/sings';
 import { getTranslationsByBirdId, type BirdTranslation } from '../../core/db/dao/bird_translations';
@@ -59,6 +65,49 @@ const BirdDetail: React.FC = () => {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [descriptionTab, setDescriptionTab] = useState<'description' | 'translation'>('description');
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const [visibleSings, setVisibleSings] = useState<Sing[]>([]);
+  const [visibleTracks, setVisibleTracks] = useState<Track[]>([]);
+
+  const handleVisibleSingsChange = useCallback((items: Sing[]) => {
+    setVisibleSings(items);
+  }, []);
+
+  const handleVisibleTracksChange = useCallback((items: Track[]) => {
+    setVisibleTracks(items);
+  }, []);
+
+  const prepareBirdAudioQueue = useCallback(
+    (currentId: string) => {
+      console.log('[BirdDetail] preparing combined audio queue');
+      console.log('[BirdDetail] visible sings:', visibleSings.length);
+      console.log('[BirdDetail] visible tracks:', visibleTracks.length);
+      console.log('[BirdDetail] interviews:', interviews.length);
+
+      const singsQueue = buildSingsQueue(visibleSings);
+      const tracksQueue = buildTracksQueue(visibleTracks);
+      const interviewsQueue = buildInterviewsQueue(interviews, {
+        artist: bird?.name || 'Imaginario',
+      });
+      const queue = combineAudioQueues(singsQueue, tracksQueue, interviewsQueue);
+
+      console.log(`[BirdDetail] sings queue: ${singsQueue.length}`);
+      console.log(`[BirdDetail] tracks queue: ${tracksQueue.length}`);
+      console.log(`[BirdDetail] interviews queue: ${interviewsQueue.length}`);
+      console.log(`[BirdDetail] combined queue: ${queue.length}`);
+      console.log(`[BirdDetail] current id: ${currentId}`);
+      console.log(
+        `[BirdDetail] queue ids: ${queue.map((item) => item.id).join(', ')}`
+      );
+
+      if (queue.length === 0) {
+        console.log('[BirdDetail] combined queue empty; queue not replaced');
+        return;
+      }
+
+      audioManager.setQueue(queue, currentId);
+    },
+    [visibleSings, visibleTracks, interviews, bird?.name]
+  );
 
   // Escuchar cambios del audioManager
   useEffect(() => {
@@ -314,19 +363,30 @@ const BirdDetail: React.FC = () => {
 
           {/* Cantos */}
           <AccordionI title="Sonidos">
-            <BirdSingsWidget items={sings} />
+            <BirdSingsWidget
+              items={sings}
+              onVisibleItemsChange={handleVisibleSingsChange}
+              onBeforePlay={prepareBirdAudioQueue}
+            />
           </AccordionI>
 
 
           {/* Música */}
           <AccordionI title="Música">
-            <BirdTracksWidget items={tracks} />
+            <BirdTracksWidget
+              items={tracks}
+              onVisibleItemsChange={handleVisibleTracksChange}
+              onBeforePlay={prepareBirdAudioQueue}
+            />
           </AccordionI>
 
 
           {/* Entrevistas */}
           <AccordionI title="Entrevistas">
-            <BirdInterviewsWidget items={interviews} />
+            <BirdInterviewsWidget
+              items={interviews}
+              onBeforePlay={prepareBirdAudioQueue}
+            />
           </AccordionI>
         </div>
       </IonContent>

@@ -11,9 +11,10 @@ import type { Interview } from "@/core/db/dao/interviews";
 type Props = {
   items: Interview[];
   title?: string;
+  onBeforePlay?: (id: string) => void;
 };
 
-const InterviewsWidget: React.FC<Props> = ({ items, title = "" }) => {
+const InterviewsWidget: React.FC<Props> = ({ items, title = "", onBeforePlay }) => {
   const [playingId, setPlayingId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -25,7 +26,9 @@ const InterviewsWidget: React.FC<Props> = ({ items, title = "" }) => {
   const handleClick = (id: string, url?: string) => {
     const item = items.find((i) => i.id === id);
     const resolved = url || item?.audio_url;
-    if (resolved) audioManager.toggle(id, resolved);
+    if (!resolved) return;
+    onBeforePlay?.(id);
+    audioManager.toggle(id, resolved);
   };
 
   return (

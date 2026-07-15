@@ -14,6 +14,8 @@ type Props = {
   items?: Sing[];
   title?: string;
   onItemClick?: (id: string) => void;
+  onVisibleItemsChange?: (items: Sing[]) => void;
+  onBeforePlay?: (id: string) => void;
 };
 
 // Subcomponente para cada tarjeta de sing individual
@@ -108,7 +110,13 @@ const SingCard: React.FC<SingCardProps> = ({ sing, isPlaying, onToggle }) => {
   );
 };
 
-const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos', onItemClick }) => {
+const SingsWidget: React.FC<Props> = ({
+  items = [],
+  title = 'Explora los cantos',
+  onItemClick,
+  onVisibleItemsChange,
+  onBeforePlay,
+}) => {
   const [playingSing, setPlayingSing] = useState<string | null>(null);
   const [displaySings, setDisplaySings] = useState<Sing[]>([]);
   const router = useIonRouter();
@@ -126,14 +134,39 @@ const SingsWidget: React.FC<Props> = ({ items = [], title = 'Explora los cantos'
   }, []);
 
   useEffect(() => {
-    if (!items || items.length === 0) return;
+    if (!items || items.length === 0) {
+      setDisplaySings([]);
+      return;
+    }
     // shuffle aleatorio + limitar a 3
     const shuffled = [...items].sort(() => 0.5 - Math.random());
     setDisplaySings(shuffled.slice(0, 3));
   }, [items]);
 
+  useEffect(() => {
+    onVisibleItemsChange?.([...displaySings]);
+  }, [displaySings, onVisibleItemsChange]);
+
   const handlePlaySing = (singId: string, url: string) => {
     const sing = displaySings.find((s) => s.id === singId);
+    onBeforePlay?.(singId);
+    if (!onBeforePlay) {
+      const queue = displaySings
+        .filter((s) => !!s.id && !!s.audio_url)
+        .map((s) => ({
+          id: s.id,
+          src: s.audio_url!,
+          metadata: {
+            title: s.title || 'Canto sin título',
+            artist:
+              s.author ||
+              s.community ||
+              s.interpreters ||
+              'Imaginario',
+          },
+        }));
+      audioManager.setQueue(queue, singId);
+    }
     audioManager.toggle(singId, url, {
       title: sing?.title || 'Canto sin título',
       artist: sing?.author || sing?.community || sing?.interpreters || 'Imaginario',

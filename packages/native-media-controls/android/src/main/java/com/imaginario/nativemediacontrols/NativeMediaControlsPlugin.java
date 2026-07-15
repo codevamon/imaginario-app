@@ -94,6 +94,38 @@ public class NativeMediaControlsPlugin extends Plugin {
         plugin.notifyListeners("nativeMediaStop", new JSObject());
     }
 
+    public static void emitNativeMediaSeekTo(double positionSeconds) {
+        NativeMediaControlsPlugin plugin = instance;
+        if (plugin == null) {
+            Log.w(TAG, "emit nativeMediaSeekTo skipped: no active plugin");
+            return;
+        }
+        Log.d(TAG, "emit nativeMediaSeekTo position=" + positionSeconds);
+        JSObject data = new JSObject();
+        data.put("position", positionSeconds);
+        plugin.notifyListeners("nativeMediaSeekTo", data);
+    }
+
+    public static void emitNativeMediaPrevious() {
+        NativeMediaControlsPlugin plugin = instance;
+        if (plugin == null) {
+            Log.w(TAG, "emit nativeMediaPrevious skipped: no active plugin");
+            return;
+        }
+        Log.d(TAG, "emit nativeMediaPrevious");
+        plugin.notifyListeners("nativeMediaPrevious", new JSObject());
+    }
+
+    public static void emitNativeMediaNext() {
+        NativeMediaControlsPlugin plugin = instance;
+        if (plugin == null) {
+            Log.w(TAG, "emit nativeMediaNext skipped: no active plugin");
+            return;
+        }
+        Log.d(TAG, "emit nativeMediaNext");
+        plugin.notifyListeners("nativeMediaNext", new JSObject());
+    }
+
     private void finishConfigure(PluginCall call) {
         MediaPlaybackService.configure(getContext(), channelId, channelName, showNotification);
         Log.d(TAG, "service configured");

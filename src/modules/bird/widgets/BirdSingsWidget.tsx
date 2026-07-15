@@ -1,13 +1,21 @@
 // src/modules/bird/widgets/BirdSingsWidget.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import SingsWidget from '../../home/widgets/SingsWidget';
 import type { Sing } from '../../../core/db/dao/sings';
 
-type Props = { 
+type Props = {
   items: Sing[];
+  onVisibleItemsChange?: (items: Sing[]) => void;
+  onBeforePlay?: (id: string) => void;
 };
 
-const BirdSingsWidget: React.FC<Props> = ({ items }) => {
+const BirdSingsWidget: React.FC<Props> = ({ items, onVisibleItemsChange, onBeforePlay }) => {
+  useEffect(() => {
+    if (!items?.length) {
+      onVisibleItemsChange?.([]);
+    }
+  }, [items, onVisibleItemsChange]);
+
   if (!items?.length) {
     return (
       <div style={{ padding: '16px', textAlign: 'center', color: 'var(--ion-color-medium)' }}>
@@ -21,11 +29,12 @@ const BirdSingsWidget: React.FC<Props> = ({ items }) => {
       <SingsWidget 
         items={items} 
         title="" 
-        onItemClick={() => {}} 
+        onItemClick={() => {}}
+        onVisibleItemsChange={onVisibleItemsChange}
+        onBeforePlay={onBeforePlay}
       />
     </div>
   );
 };
 
 export default BirdSingsWidget;
-

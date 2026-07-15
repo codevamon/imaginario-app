@@ -89,6 +89,52 @@ function handleNativeMediaStop(): void {
   void nativeClear();
 }
 
+function handleNativeMediaSeekTo(position: number): void {
+  console.log('[AudioManager][NativeBridge] nativeMediaSeekTo');
+
+  if (!Number.isFinite(position)) {
+    console.log('[AudioManager][NativeBridge] nativeMediaSeekTo skipped: invalid position');
+    return;
+  }
+
+  const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
+  if (!audio || !audio.src) {
+    console.log('[AudioManager][NativeBridge] nativeMediaSeekTo skipped: no active audio');
+    return;
+  }
+
+  const duration = audio.duration;
+  if (!Number.isFinite(duration) || duration <= 0) {
+    console.log('[AudioManager][NativeBridge] nativeMediaSeekTo skipped: duration not ready');
+    return;
+  }
+
+  const target = Math.max(0, Math.min(position, duration));
+  audio.currentTime = target;
+  (audioManager as any).setProgress?.(target);
+  lastNativePositionSyncAt = 0;
+  void nativeSetPosition(target, duration, audio.paused ? 0 : 1);
+  console.log(`[AudioManager] seeked from native controls: ${target}s`);
+}
+
+async function handleNativeMediaPrevious(): Promise<void> {
+  console.log('[AudioManager][NativeBridge] nativeMediaPrevious');
+  if (!audioManager.hasPrevious()) {
+    console.log('[AudioManager][NativeBridge] nativeMediaPrevious skipped: no previous');
+    return;
+  }
+  await audioManager.playPrevious();
+}
+
+async function handleNativeMediaNext(): Promise<void> {
+  console.log('[AudioManager][NativeBridge] nativeMediaNext');
+  if (!audioManager.hasNext()) {
+    console.log('[AudioManager][NativeBridge] nativeMediaNext skipped: no next');
+    return;
+  }
+  await audioManager.playNext();
+}
+
 function setupNativeMediaControlsListeners(): void {
   if (!canUseNativeMediaControls()) return;
   if (nativeMediaControlsListenersRegistered) return;
@@ -107,6 +153,18 @@ function setupNativeMediaControlsListeners(): void {
   void NativeMediaControls.addListener('nativeMediaStop', () => {
     console.log('[AudioManager][NativeBridge] nativeMediaStop');
     handleNativeMediaStop();
+  });
+
+  void NativeMediaControls.addListener('nativeMediaSeekTo', ({ position }) => {
+    handleNativeMediaSeekTo(position);
+  });
+
+  void NativeMediaControls.addListener('nativeMediaPrevious', () => {
+    void handleNativeMediaPrevious();
+  });
+
+  void NativeMediaControls.addListener('nativeMediaNext', () => {
+    void handleNativeMediaNext();
   });
 }
 
@@ -216,6 +274,12 @@ export type AudioPlayMetadata = {
   title?: string;
   artist?: string;
   artworkUrl?: string;
+};
+
+export type AudioQueueItem = {
+  id: string;
+  src: string;
+  metadata?: AudioPlayMetadata;
 };
 
 type OnChangeCb = (playingId: string | null) => void;
@@ -516,6 +580,8 @@ class AudioManager {
   private currentMetadata: AudioPlayMetadata | null = null;
   private lastPlayId: string | null = null;
   private lastPlaySrc: string | null = null;
+  private queue: AudioQueueItem[] = [];
+  private queueIndex = -1;
 
   private startProgressLoop() {
     if (this.animationFrameId) {
@@ -1158,14 +1224,56 @@ class AudioManager {
       this.setProgress(currentTime);
     };
     
-    this.audio.onended = () => {
-      console.log('[AudioManager] track ended:', id);
+    this.audio.onended = async () => {
+      const endedAudio = this.audio;
+      const endedId = this.playingId;
+      console.log('[AudioManager] track ended:', endedId);
+
       if (this.progressTimer) {
         clearInterval(this.progressTimer);
         this.progressTimer = null;
       }
       this.setProgress(0);
       this.stopProgressLoop();
+
+      if (this.hasNext()) {
+        console.log(`[AudioManager] track ended; attempting next after: ${endedId}`);
+        const advanced = await this.playNext();
+
+        if (
+          this.playingId !== null &&
+          this.playingId !== endedId
+        ) {
+          if (advanced) {
+            console.log('[AudioManager] auto-next started successfully');
+          } else {
+            console.log(
+              '[AudioManager] track ended handler stale; another track active'
+            );
+          }
+          return;
+        }
+
+        if (advanced) {
+          console.log('[AudioManager] auto-next started successfully');
+          return;
+        }
+
+        console.warn('[AudioManager] auto-next failed; applying normal ended state');
+      } else {
+        console.log('[AudioManager] track ended; no next queue item');
+      }
+
+      if (
+        (this.playingId !== null && this.playingId !== endedId) ||
+        (this.audio !== null && this.audio !== endedAudio)
+      ) {
+        console.log(
+          '[AudioManager] track ended handler stale; skip stopped/clear'
+        );
+        return;
+      }
+
       void nativeSetPlaybackState('stopped');
       scheduleDelayedNativeClear();
       this.setPlaying(null, { endOfTrack: true });
@@ -1417,6 +1525,88 @@ class AudioManager {
     }
   }
 
+  setQueue(items: AudioQueueItem[], currentId?: string): void {
+    const seen = new Set<string>();
+    const filtered: AudioQueueItem[] = [];
+    for (const item of items) {
+      if (!item?.id || !item?.src) continue;
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      filtered.push({
+        id: item.id,
+        src: item.src,
+        metadata: item.metadata,
+      });
+    }
+    this.queue = filtered;
+    if (currentId) {
+      this.queueIndex = filtered.findIndex((item) => item.id === currentId);
+    } else {
+      this.queueIndex = -1;
+    }
+    console.log(
+      `[AudioManager] queue set: ${this.queue.length} items, current index ${this.queueIndex}`
+    );
+  }
+
+  clearQueue(): void {
+    this.queue = [];
+    this.queueIndex = -1;
+    console.log('[AudioManager] queue cleared');
+  }
+
+  getQueue(): AudioQueueItem[] {
+    return this.queue.map((item) => ({
+      id: item.id,
+      src: item.src,
+      metadata: item.metadata,
+    }));
+  }
+
+  getQueueIndex(): number {
+    return this.queueIndex;
+  }
+
+  private resolveQueueIndex(): number {
+    if (this.queueIndex >= 0 && this.queueIndex < this.queue.length) {
+      return this.queueIndex;
+    }
+    if (this.lastPlayId) {
+      return this.queue.findIndex((item) => item.id === this.lastPlayId);
+    }
+    return -1;
+  }
+
+  hasNext(): boolean {
+    const index = this.resolveQueueIndex();
+    return index >= 0 && index < this.queue.length - 1;
+  }
+
+  hasPrevious(): boolean {
+    const index = this.resolveQueueIndex();
+    return index > 0;
+  }
+
+  async playNext(): Promise<boolean> {
+    if (this.queue.length === 0) return false;
+    const index = this.resolveQueueIndex();
+    if (index < 0 || index >= this.queue.length - 1) return false;
+    const item = this.queue[index + 1];
+    console.log('[AudioManager] playNext:', item.id);
+    await this.play(item.id, item.src, item.metadata);
+    return this.playingId === item.id;
+  }
+
+  async playPrevious(): Promise<boolean> {
+    if (this.queue.length === 0) return false;
+    const index = this.resolveQueueIndex();
+    if (index <= 0) return false;
+    const item = this.queue[index - 1];
+    console.log('[AudioManager] playPrevious:', item.id);
+    await this.play(item.id, item.src, item.metadata);
+    return this.playingId === item.id;
+  }
+
   getPlayingId() { return this.playingId; }
 
   isCapgoStarting(): boolean {
@@ -1484,6 +1674,10 @@ class AudioManager {
   private setPlaying(id: string | null, options?: { endOfTrack?: boolean }) {
     this.playingId = id;
     if (id) {
+      const idx = this.queue.findIndex((item) => item.id === id);
+      if (idx >= 0) {
+        this.queueIndex = idx;
+      }
       updateMediaSession(this.currentMetadata ?? undefined);
     } else if (options?.endOfTrack) {
       clearMediaSession();

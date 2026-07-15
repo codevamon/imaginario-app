@@ -1,5 +1,5 @@
 // src/modules/home/widgets/TracksWidget.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { play, pause } from 'ionicons/icons';
 import { IonIcon, IonSpinner } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
@@ -17,6 +17,8 @@ type Props = {
   showViewMore?: boolean;      // muestra u oculta el botón "Ver más"
   maxItems?: number;            // limita cantidad de ítems visibles
   limit?: number | null;        // control explícito del límite: null = sin límite, undefined = usar maxItems
+  onVisibleItemsChange?: (items: Track[]) => void;
+  onBeforePlay?: (id: string) => void;
 };
 
 // Subcomponente individual (idéntico a SingCard)
@@ -110,6 +112,8 @@ const TracksWidget: React.FC<Props> = ({
   showViewMore = true,
   maxItems = 6,
   limit,
+  onVisibleItemsChange,
+  onBeforePlay,
 }) => {
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
   const router = useIonRouter();
@@ -122,13 +126,35 @@ const TracksWidget: React.FC<Props> = ({
   }, []);
 
   // Variable derivada: limitar ítems visibles
-  const visibleItems =
-    limit === null
-      ? items
-      : items.slice(0, limit ?? maxItems);
+  const visibleItems = useMemo(
+    () => (limit === null ? items : items.slice(0, limit ?? maxItems)),
+    [items, limit, maxItems]
+  );
+
+  useEffect(() => {
+    onVisibleItemsChange?.([...visibleItems]);
+  }, [visibleItems, onVisibleItemsChange]);
 
   const handlePlayTrack = (trackId: string, url: string) => {
     const track = visibleItems.find((t) => t.id === trackId);
+    onBeforePlay?.(trackId);
+    if (!onBeforePlay) {
+      const queue = visibleItems
+        .filter((t) => !!t.id && !!t.audio_url)
+        .map((t) => ({
+          id: t.id,
+          src: t.audio_url!,
+          metadata: {
+            title: t.title || 'Sin título',
+            artist:
+              t.interpreters ||
+              t.author ||
+              t.community ||
+              'Imaginario',
+          },
+        }));
+      audioManager.setQueue(queue, trackId);
+    }
     audioManager.toggle(trackId, url, {
       title: track?.title || 'Sin título',
       artist: track?.interpreters || track?.author || track?.community || 'Imaginario',
