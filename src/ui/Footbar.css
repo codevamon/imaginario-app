@@ -65,6 +65,10 @@
   justify-content: center;
 }
 
+.footbar-item .icon ion-icon.md.hydrated {
+  font-size: 6vw;
+}
+
 .item-home.footbar-item.active svg path,
 .item-discover.footbar-item.active svg circle.pupila,
 .item-music.footbar-item.active .icon svg path.boquilla,
