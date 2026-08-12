@@ -449,18 +449,13 @@ export default function SyncCenter() {
 
   return (
     <IonPage>
-      <IonHeader>
-        <IonToolbar>
-          <IonTitle>Monitor de Descargas</IonTitle>
-        </IonToolbar>
-      </IonHeader>
 
       <IonContent className="ion-padding">
         <div style={{ 
           display: 'flex', 
           flexDirection: 'column', 
           gap: '16px',
-          paddingTop: '20px',
+          paddingTop: 'calc(env(safe-area-inset-top) + 10vw)',
           paddingBottom: '100px'
         }}>
           <h2 style={{ 

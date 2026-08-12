@@ -8,6 +8,36 @@ import { getAllTracks, type Track } from '../db/dao/tracks';
 import { getAllInterviews, type Interview } from '../db/dao/interviews';
 
 const DEBUG = import.meta.env.VITE_DEBUG_CACHE === 'true';
+const DEBUG_AUDIO_PERSISTENCE = true;
+
+function audioPersistenceDebug(label: string, data: Record<string, unknown>) {
+  if (!DEBUG_AUDIO_PERSISTENCE) return;
+  console.log(`[AudioPersistenceDebug] ${label}`, data);
+}
+
+function normalizeAudioUrlForDebug(url: string): string {
+  if (!url) return url;
+  if (url.includes('?') || url.includes('#')) {
+    try {
+      const u = new URL(url);
+      u.search = '';
+      u.hash = '';
+      return u.toString();
+    } catch {
+      return url.split('?')[0].split('#')[0];
+    }
+  }
+  return url;
+}
+
+async function statAudioPathForDebug(path: string): Promise<{ exists: boolean; size: number }> {
+  try {
+    const stat = await Filesystem.stat({ path, directory: Directory.Data });
+    return { exists: true, size: stat?.size || 0 };
+  } catch {
+    return { exists: false, size: 0 };
+  }
+}
 
 // Configuración
 const CACHE_CONFIG = {
@@ -299,6 +329,12 @@ export async function downloadAudioItem(
     const size = stat?.size || 0;
 
     if (size < minSizeBytes) {
+      audioPersistenceDebug('delete requested', {
+        path,
+        reason: 'download-below-threshold',
+        size,
+        caller: 'downloadAudioItem',
+      });
       await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
       const error = `Archivo corrupto o incompleto (${size} bytes, mínimo ${minSizeBytes} bytes)`;
       logWarn('[downloadAudioItem] ❌', error, path);
@@ -602,6 +638,22 @@ async function enforceCacheLimit(): Promise<void> {
       if (currentSize - freedBytes <= CACHE_CONFIG.maxSizeBytes) {
         break;
       }
+
+      if (
+        file.path === CACHE_CONFIG.audioDir ||
+        file.path.startsWith(`${CACHE_CONFIG.audioDir}/`)
+      ) {
+        console.log('[Cache] preserving offline audio from cache eviction:', file.path);
+        continue;
+      }
+
+      if (
+        file.path === CACHE_CONFIG.imagesDir ||
+        file.path.startsWith(`${CACHE_CONFIG.imagesDir}/`)
+      ) {
+        console.log('[Cache] preserving offline image from cache eviction:', file.path);
+        continue;
+      }
       
       try {
         await Filesystem.deleteFile({
@@ -743,6 +795,12 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
           console.warn(
             `[CacheAudio] ⚠️ Archivo sospechoso (${stat?.size || 0} bytes), reintentando (${attempt})`,
           );
+          audioPersistenceDebug('delete requested', {
+            path,
+            reason: 'cache-audio-below-1kb',
+            size: stat?.size || 0,
+            caller: 'cacheAudio',
+          });
           await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(
             () => {},
           );
@@ -1090,11 +1148,11 @@ export async function verifyAudioCacheWithProgress(
     const dbConn = await getDb();
 
     const res = await dbConn.query(`
-      SELECT id, audio_url, updated_at FROM tracks WHERE deleted_at IS NULL
+      SELECT id, audio_url, updated_at, 'tracks' as audio_type FROM tracks WHERE deleted_at IS NULL
       UNION ALL
-      SELECT id, audio_url, updated_at FROM sings WHERE deleted_at IS NULL
+      SELECT id, audio_url, updated_at, 'sings' as audio_type FROM sings WHERE deleted_at IS NULL
       UNION ALL
-      SELECT id, audio_url, updated_at FROM interviews WHERE deleted_at IS NULL
+      SELECT id, audio_url, updated_at, 'interviews' as audio_type FROM interviews WHERE deleted_at IS NULL
     `);
     const allAudios = res.values || [];
     total = allAudios.length;
@@ -1120,16 +1178,19 @@ export async function verifyAudioCacheWithProgress(
       const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
       const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
       const path = `imaginario/audio/${hashHex}.mp3`;
+      const audioType = audio.audio_type || 'unknown';
 
       // Verificar si el archivo existe y tiene tamaño válido
       let fileExists = false;
       let fileSizeValid = false;
+      let verifySize = 0;
 
       try {
         const stat = await Filesystem.stat({ path, directory: Directory.Data });
         
         if (stat?.size) {
           fileExists = true;
+          verifySize = stat.size;
           
           // Verificar tamaño mínimo
           if (stat.size >= MIN_SIZE_BYTES) {
@@ -1138,6 +1199,16 @@ export async function verifyAudioCacheWithProgress(
             completed++;
             checked++;
             console.log(`[VerifyAudio] ✅ Audio completo: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
+            audioPersistenceDebug('verify', {
+              id: audio.id,
+              type: audioType,
+              url,
+              expectedPath: path,
+              exists: true,
+              size: verifySize,
+              threshold: MIN_SIZE_BYTES,
+              action: 'keep',
+            });
             notifyProgress();
             continue;
           } else {
@@ -1164,6 +1235,8 @@ export async function verifyAudioCacheWithProgress(
         checked++;
         notifyProgress();
 
+        let verifyAction: 'redownload' | 'delete' | 'pending' = isOnline ? 'redownload' : 'pending';
+
         if (isOnline) {
           downloading++;
           notifyProgress();
@@ -1187,10 +1260,18 @@ export async function verifyAudioCacheWithProgress(
                   if (stat?.size && stat.size >= MIN_SIZE_BYTES) {
                     downloadSuccess = true;
                     completed++;
+                    verifySize = stat.size;
                     console.log(`[VerifyAudio] ✅ Descarga exitosa: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
                   } else {
                     console.warn(`[DebugVerify] Archivo descargado sospechoso o vacío: ${path} (tamaño: ${stat?.size || 0} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
                     console.warn(`[VerifyAudio] ⚠️ Archivo descargado incompleto (${stat.size || 0} bytes), reintentando...`);
+                    audioPersistenceDebug('delete requested', {
+                      path,
+                      reason: 'verify-redownload-below-threshold',
+                      size: stat?.size || 0,
+                      caller: 'verifyAudioCacheWithProgress',
+                    });
+                    verifyAction = 'delete';
                     // Eliminar archivo incompleto antes de reintentar
                     await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
                     if (attempts < maxAttempts) {
@@ -1223,6 +1304,8 @@ export async function verifyAudioCacheWithProgress(
 
           if (!downloadSuccess) {
             console.error(`[VerifyAudio] ❌ No se pudo descargar/validar ${url} tras ${maxAttempts} intentos, marcado como incompleto`);
+          } else {
+            verifyAction = 'redownload';
           }
 
           downloading--;
@@ -1230,6 +1313,17 @@ export async function verifyAudioCacheWithProgress(
         } else {
           console.warn(`[VerifyAudio] ⚠️ Sin conexión, no se puede descargar: ${url}`);
         }
+
+        audioPersistenceDebug('verify', {
+          id: audio.id,
+          type: audioType,
+          url,
+          expectedPath: path,
+          exists: fileExists,
+          size: verifySize,
+          threshold: MIN_SIZE_BYTES,
+          action: verifyAction,
+        });
       }
     }
 
@@ -1369,7 +1463,7 @@ async function processAudioItem(
         status = 'downloaded';
       }
 
-      return {
+      const item = {
         id: audio.id,
         table,
         title: audio.title,
@@ -1379,9 +1473,11 @@ async function processAudioItem(
         size,
         status,
       };
+      await logAudioInventoryPersistence(item, hash);
+      return item;
     } catch (statError) {
       // Archivo no existe
-      return {
+      const item = {
         id: audio.id,
         table,
         title: audio.title,
@@ -1389,8 +1485,10 @@ async function processAudioItem(
         expectedPath,
         exists: false,
         size: 0,
-        status: 'pending',
+        status: 'pending' as AudioDownloadStatus,
       };
+      await logAudioInventoryPersistence(item, hash);
+      return item;
     }
   } catch (error) {
     console.error(`[AudioInventory] Error procesando audio ${audio.id}:`, error);
@@ -1406,6 +1504,42 @@ async function processAudioItem(
       status: 'pending',
     };
   }
+}
+
+async function logAudioInventoryPersistence(
+  item: {
+    id: string;
+    table: 'sings' | 'tracks' | 'interviews';
+    audio_url: string | null;
+    expectedPath: string;
+    exists: boolean;
+    size: number;
+    status: AudioDownloadStatus;
+  },
+  hashRaw: string
+): Promise<void> {
+  if (!DEBUG_AUDIO_PERSISTENCE || !item.audio_url) return;
+
+  const normalizedUrl = normalizeAudioUrlForDebug(item.audio_url);
+  const hashNormalized = await sha256(normalizedUrl);
+  const expectedPathNormalized = `imaginario/audio/${hashNormalized}.mp3`;
+  const normalizedStat = await statAudioPathForDebug(expectedPathNormalized);
+
+  audioPersistenceDebug('inventory', {
+    id: item.id,
+    type: item.table,
+    url: item.audio_url,
+    normalizedUrl,
+    hashRaw,
+    hashNormalized,
+    expectedPathRaw: item.expectedPath,
+    expectedPathNormalized,
+    rawExists: item.exists,
+    rawSize: item.size,
+    normalizedExists: normalizedStat.exists,
+    normalizedSize: normalizedStat.size,
+    status: item.status,
+  });
 }
 
 /**

@@ -1,12 +1,17 @@
 .footbar {
   position: fixed;
-  bottom: 3.5rem;
   left: 10px;
   right: 10px;
   z-index: 999;
   display: flex;
   justify-content: center;
   align-items: center;
+}
+.ios .footbar{
+  bottom: env(safe-area-inset-bottom);
+}
+.md .footbar{
+  bottom: 3.5rem;
 }
 
 .footbar-inner {

@@ -27,6 +27,28 @@ const USE_COMMUNITY_NATIVE_AUDIO = false;
 
 const USE_NATIVE_MEDIA_CONTROLS = true;
 
+const DEBUG_AUDIO_PERSISTENCE = true;
+
+function audioPersistenceDebug(label: string, data: Record<string, unknown>) {
+  if (!DEBUG_AUDIO_PERSISTENCE) return;
+  console.log(`[AudioPersistenceDebug] ${label}`, data);
+}
+
+function normalizeAudioUrlForDebug(url: string): string {
+  if (!url) return url;
+  if (url.includes('?') || url.includes('#')) {
+    try {
+      const u = new URL(url);
+      u.search = '';
+      u.hash = '';
+      return u.toString();
+    } catch {
+      return url.split('?')[0].split('#')[0];
+    }
+  }
+  return url;
+}
+
 // 🔒 Previene autopause en el primer tap al entrar a una vista
 let allowAutoPause = true;
 
@@ -331,8 +353,23 @@ async function reDownloadAudio(url: string, hash: string): Promise<void> {
     
     // Eliminar archivo corrupto anterior si existe
     try {
+      const deletePath = `imaginario/audio/${hash}.mp3`;
+      let existingSize: number | null = null;
+      try {
+        const existing = await Filesystem.stat({
+          path: deletePath,
+          directory: Directory.Data,
+        });
+        existingSize = existing?.size ?? 0;
+      } catch {}
+      audioPersistenceDebug('delete requested', {
+        path: deletePath,
+        reason: 'redownload-replace',
+        size: existingSize,
+        caller: 'reDownloadAudio',
+      });
       await Filesystem.deleteFile({
-        path: `imaginario/audio/${hash}.mp3`,
+        path: deletePath,
         directory: Directory.Data,
       });
     } catch {} // Ignorar si no existe
@@ -486,6 +523,15 @@ async function prepareSource(originalSrc: string, id: string): Promise<string> {
     // 🎯 PRIORIDAD 1: Intentar usar archivo local SIEMPRE (con o sin red)
     try {
       const stat = await Filesystem.stat({ path: relPath, directory: Directory.Data });
+      audioPersistenceDebug('player lookup', {
+        id,
+        originalUrl: originalSrc,
+        normalizedUrl: normalizeAudioUrlForDebug(originalSrc),
+        hash,
+        expectedPath: relPath,
+        exists: true,
+        size: stat?.size || 0,
+      });
       // Verificar que el archivo existe y tiene tamaño válido (> 1KB)
       if (stat && stat.size && stat.size > 1024) {
         const uri = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
@@ -498,6 +544,15 @@ async function prepareSource(originalSrc: string, id: string): Promise<string> {
       }
     } catch (statError) {
       // Archivo no existe localmente, continuar al paso 2
+      audioPersistenceDebug('player lookup', {
+        id,
+        originalUrl: originalSrc,
+        normalizedUrl: normalizeAudioUrlForDebug(originalSrc),
+        hash,
+        expectedPath: relPath,
+        exists: false,
+        size: 0,
+      });
       console.log('[AudioManager] 📡 Archivo no encontrado en caché local, verificando conexión...');
     }
 
@@ -1110,6 +1165,12 @@ class AudioManager {
                   ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
                   : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
                 
+                audioPersistenceDebug('delete requested', {
+                  path: relativePath,
+                  reason: 'resume-domexception',
+                  size: null,
+                  caller: 'AudioManager.resume',
+                });
                 await Filesystem.deleteFile({
                   path: relativePath,
                   directory: Directory.Data,
@@ -1187,6 +1248,12 @@ class AudioManager {
 
         if (stat.size < 10240) { // menos de 10 KB = posible corrupción
           console.warn(`[AudioManager] ⚠️ Archivo corrupto detectado (${stat.size} bytes). Eliminando:`, relativePath);
+          audioPersistenceDebug('delete requested', {
+            path: relativePath,
+            reason: 'preplay-below-10kb',
+            size: stat.size,
+            caller: 'AudioManager.play',
+          });
           await Filesystem.deleteFile({
             path: relativePath,
             directory: Directory.Data,
@@ -1318,6 +1385,12 @@ class AudioManager {
               }).catch(() => null);
 
               if (stat && (stat.size ?? 0) < 10240) {
+                audioPersistenceDebug('delete requested', {
+                  path: relativePath,
+                  reason: 'onerror-below-10kb',
+                  size: stat.size ?? 0,
+                  caller: 'AudioManager.onerror',
+                });
                 await Filesystem.deleteFile({
                   path: relativePath,
                   directory: Directory.Data,
@@ -1393,6 +1466,12 @@ class AudioManager {
                 ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
                 : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
               
+              audioPersistenceDebug('delete requested', {
+                path: relativePath,
+                reason: 'domexception-before-redownload',
+                size: null,
+                caller: 'AudioManager.play',
+              });
               await Filesystem.deleteFile({
                 path: relativePath,
                 directory: Directory.Data,

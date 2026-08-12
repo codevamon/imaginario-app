@@ -28,6 +28,13 @@ const SYNC_CONFIG = {
   tables: ['birds', 'bird_images', 'bird_translations', 'sings', 'tracks', 'interviews', 'musicians'] as const
 };
 
+const DEBUG_AUDIO_PERSISTENCE = true;
+
+function audioPersistenceDebug(label: string, data: Record<string, unknown>) {
+  if (!DEBUG_AUDIO_PERSISTENCE) return;
+  console.log(`[AudioPersistenceDebug] ${label}`, data);
+}
+
 // activity_log se inicializa automáticamente en initDb()
 
 /**
@@ -273,6 +280,41 @@ export async function pullTableDelta(table: string, pageSize = SYNC_CONFIG.pageS
         author: row.author ?? null
       };
     });
+
+    if (
+      DEBUG_AUDIO_PERSISTENCE &&
+      (table === 'sings' || table === 'tracks' || table === 'interviews')
+    ) {
+      try {
+        const ids = normalizedRows.map((row) => row.id).filter(Boolean);
+        if (ids.length > 0) {
+          const dbConnection = await getDb();
+          const placeholders = ids.map(() => '?').join(',');
+          const existing = await dbConnection.query(
+            `SELECT id, audio_url FROM ${table} WHERE id IN (${placeholders})`,
+            ids
+          );
+          const previousById = new Map(
+            (existing.values || []).map((row: any) => [row.id, row.audio_url ?? null])
+          );
+          for (const row of normalizedRows) {
+            if (!previousById.has(row.id)) continue;
+            const previousUrl = previousById.get(row.id);
+            const newUrl = row.audio_url ?? null;
+            if (previousUrl !== newUrl) {
+              audioPersistenceDebug('audio url changed', {
+                table,
+                id: row.id,
+                previousUrl,
+                newUrl,
+              });
+            }
+          }
+        }
+      } catch (debugError) {
+        console.warn('[AudioPersistenceDebug] url-compare failed', debugError);
+      }
+    }
 
     await upsertMany(table, normalizedRows);
     

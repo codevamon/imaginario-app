@@ -13,10 +13,11 @@ import {
   IonButton,
   IonSegment,
   IonSegmentButton,
-  IonLabel
+  IonLabel,
+  IonModal,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
-import { play, pause } from 'ionicons/icons';
+import { play, pause, close } from 'ionicons/icons';
 import { getBirdById, type Bird } from '../../core/db/dao/birds';
 import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
 import { listMusicians, type Musician } from '../../core/db/dao/musicians';
@@ -67,6 +68,8 @@ const BirdDetail: React.FC = () => {
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const [visibleSings, setVisibleSings] = useState<Sing[]>([]);
   const [visibleTracks, setVisibleTracks] = useState<Track[]>([]);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const handleVisibleSingsChange = useCallback((items: Sing[]) => {
     setVisibleSings(items);
@@ -245,6 +248,17 @@ const BirdDetail: React.FC = () => {
   console.log('[BirdDetail] 🔍 Should show tracks accordion:', tracks.length > 0);
   console.log('[BirdDetail] 🔍 Should show interviews accordion:', interviews.length > 0);
 
+  const galleryImages =
+    images.length > 0
+      ? images
+      : [
+          {
+            id: 'fallback',
+            url: bird.image_url || '/assets/default-bird.jpg',
+            description: 'Imagen no disponible',
+          },
+        ];
+
   return (
     <IonPage>
       <IonContent>
@@ -259,21 +273,35 @@ const BirdDetail: React.FC = () => {
                 modules={[Pagination]}
                 spaceBetween={0}
                 slidesPerView={1}
-                pagination={{
-                  clickable: true,
-                  bulletClass: 'swiper-pagination-bullet',
-                  bulletActiveClass: 'swiper-pagination-bullet-active',
-                }}
-                loop={images.length > 1}
-                autoplay={images.length > 1 ? { delay: 3000 } : false}
+                pagination={
+                  galleryImages.length > 1
+                    ? {
+                        clickable: true,
+                        bulletClass: 'swiper-pagination-bullet',
+                        bulletActiveClass: 'swiper-pagination-bullet-active',
+                      }
+                    : false
+                }
+                loop={galleryImages.length > 1}
+                autoplay={galleryImages.length > 1 ? { delay: 3000 } : false}
               >
-                {(images.length > 0 ? images : [{ id: 'fallback', url: bird.image_url || '/assets/default-bird.jpg', description: 'Imagen no disponible' }]).map((image) => (
+                {galleryImages.map((image, index) => (
                   <SwiperSlide key={image.id}>
-                    <BirdImage
-                      url={image.url}
-                      alt={image.description || bird.name}
-                      className="bird-image"
-                    />
+                    <button
+                      type="button"
+                      className="bird-gallery-trigger"
+                      onClick={() => {
+                        setSelectedImageIndex(index);
+                        setIsGalleryOpen(true);
+                      }}
+                      aria-label={`Ver imagen ${index + 1} de ${galleryImages.length} en tamaño completo`}
+                    >
+                      <BirdImage
+                        url={image.url}
+                        alt={image.description || bird.name}
+                        className="bird-image"
+                      />
+                    </button>
                   </SwiperSlide>
                 ))}
               </Swiper>
@@ -389,6 +417,50 @@ const BirdDetail: React.FC = () => {
             />
           </AccordionI>
         </div>
+
+        <IonModal
+          isOpen={isGalleryOpen}
+          onDidDismiss={() => setIsGalleryOpen(false)}
+          backdropDismiss={true}
+          className="bird-gallery-modal"
+        >
+          <button
+            type="button"
+            className="bird-gallery-close"
+            onClick={() => setIsGalleryOpen(false)}
+            aria-label="Cerrar galería"
+          >
+            <IonIcon icon={close} />
+          </button>
+          <Swiper
+            key={`bird-gallery-${id}-${selectedImageIndex}-${isGalleryOpen}`}
+            initialSlide={selectedImageIndex}
+            slidesPerView={1}
+            spaceBetween={0}
+            loop={false}
+            pagination={
+              galleryImages.length > 1
+                ? {
+                    clickable: true,
+                    bulletClass: 'swiper-pagination-bullet',
+                    bulletActiveClass: 'swiper-pagination-bullet-active',
+                  }
+                : false
+            }
+            modules={[Pagination]}
+            className="bird-gallery-swiper"
+          >
+            {galleryImages.map((image) => (
+              <SwiperSlide key={`gallery-${image.id}`}>
+                <BirdImage
+                  url={image.url}
+                  alt={image.description || bird.name}
+                  className="bird-gallery-image"
+                />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </IonModal>
       </IonContent>
     </IonPage>
   );

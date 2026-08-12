@@ -7,7 +7,7 @@ import {
 import { Preferences } from '@capacitor/preferences';
 import { Network } from '@capacitor/network';
 import { filter, refresh } from 'ionicons/icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
 import { listBirds, type Bird } from '../../core/db/dao/birds';
@@ -34,6 +34,7 @@ export default function HomePage() {
   const [isResyncing, setIsResyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     loadData();
@@ -119,17 +120,42 @@ export default function HomePage() {
   }
 
   async function handleRefresh(event: CustomEvent) {
-    const status = await Network.getStatus();
-    if (!status.connected) {
-      console.warn('[Sync] 🚫 Sin conexión: refresco cancelado.');
-      setTimeout(() => event.detail.complete(), 500);
+    const complete = () => {
+      event.detail?.complete?.();
+      console.log('[HomeRefresh] complete');
+    };
+
+    if (refreshInFlightRef.current) {
+      complete();
       return;
     }
 
-    // si hay conexión, ejecutar la sync normal
-    await pullAllTables();
-    await loadData();
-    event.detail.complete();
+    refreshInFlightRef.current = true;
+    console.log('[HomeRefresh] start');
+
+    try {
+      const status = await Network.getStatus();
+      if (!status.connected) {
+        console.log('[HomeRefresh] offline - keeping local content');
+        setSyncMessage('Sin conexión. Mostrando contenido guardado.');
+        setShowToast(true);
+        return;
+      }
+
+      await pullAllTables();
+      console.log('[HomeRefresh] sync complete');
+      await loadData({ showLoading: false });
+      console.log('[HomeRefresh] local data reloaded');
+      setSyncMessage('Contenido actualizado');
+      setShowToast(true);
+    } catch (error) {
+      console.error('[HomeRefresh] failed');
+      setSyncMessage('No se pudo actualizar. Mostrando contenido guardado.');
+      setShowToast(true);
+    } finally {
+      refreshInFlightRef.current = false;
+      complete();
+    }
   }
 
   // --- nueva util: adjunta la primera imagen encontrada en bird_images (si existe DAO)
@@ -172,9 +198,12 @@ export default function HomePage() {
     return birds;
   };
 
-  async function loadData() {
+  async function loadData(options?: { showLoading?: boolean }) {
+    const showLoading = options?.showLoading ?? true;
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       console.log('[HomePage] Cargando datos desde SQLite (offline-first)...');
 
       // trae aves desde DAO (offline-first)
@@ -229,10 +258,16 @@ export default function HomePage() {
       console.log('[HomePage] ✅ Datos cargados desde SQLite local (con imágenes adjuntas)');
     } catch (error) {
       console.error('[HomePage] ❌ Error cargando datos desde SQLite:', error);
-      setFeatured([]);
-      setPopular([]);
+      if (showLoading) {
+        setFeatured([]);
+        setPopular([]);
+      } else {
+        throw error;
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }
 

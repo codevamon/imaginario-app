@@ -1,5 +1,8 @@
 /* === Welcome Widget === */
-.widget-welcome-i {
+.ios .widget-welcome-i {
+  padding: calc(env(safe-area-inset-top) + 10vw) 5vw 5vw;
+}
+.md .widget-welcome-i {
   padding: 15vw 5vw 5vw;
 }
 .widget-welcome-i .in-widget .h1-i {

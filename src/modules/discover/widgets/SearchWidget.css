@@ -1,5 +1,8 @@
 /* === Search Widget === */
-.search-widget-i {
+.ios .search-widget-i {
+  padding: calc(env(safe-area-inset-top) + 10vw) 5vw 2.5vw;
+}
+.md .search-widget-i {
   padding: 15vw 5vw 2.5vw;
 }
 
