@@ -154,7 +154,7 @@ export function useCacheManager() {
 
         try {
 
-          const result = await ensureCachedMedia(encodeURI(item.url), item.type);
+          const result = await ensureCachedMedia(item.url, item.type);
 
         if (result) completed++;
 

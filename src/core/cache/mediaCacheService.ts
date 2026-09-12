@@ -152,6 +152,234 @@ async function sha256(url: string): Promise<string> {
   }
 }
 
+const AUDIO_CACHE_HEAD_TIMEOUT_MS = 5000;
+
+function canonicalizeAudioUrl(url: string): string {
+  // Misma representación que SQLite / player: URL cruda, sin encodeURI.
+  return url.trim();
+}
+
+async function sha256AudioUrl(url: string): Promise<string> {
+  return sha256(canonicalizeAudioUrl(url));
+}
+
+function audioPartPath(finalPath: string): string {
+  return `${finalPath}.part`;
+}
+
+function audioCacheLog(
+  event: 'valid' | 'size mismatch' | 'redownloading' | 'download complete' | 'partial download removed',
+  data?: Record<string, unknown>
+) {
+  if (data) {
+    console.log(`[AUDIO CACHE] ${event}`, data);
+    return;
+  }
+  console.log(`[AUDIO CACHE] ${event}`);
+}
+
+async function deleteAudioCacheFile(path: string): Promise<void> {
+  await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
+}
+
+async function statAudioFile(path: string): Promise<{ size: number } | null> {
+  try {
+    const stat = await Filesystem.stat({ path, directory: Directory.Data });
+    if (!stat) return null;
+    return { size: stat.size || 0 };
+  } catch {
+    return null;
+  }
+}
+
+async function getRemoteContentLength(url: string): Promise<number | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), AUDIO_CACHE_HEAD_TIMEOUT_MS);
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!response.ok) return null;
+    const header = response.headers.get('content-length');
+    if (!header) return null;
+    const size = Number.parseInt(header, 10);
+    if (!Number.isFinite(size) || size <= 0) return null;
+    return size;
+  } catch {
+    return null;
+  }
+}
+
+const audioCacheLocks = new Map<string, Promise<unknown>>();
+
+async function withAudioCacheLock<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
+  const previous = audioCacheLocks.get(lockKey) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const chained = previous.then(() => gate);
+  audioCacheLocks.set(lockKey, chained);
+  try {
+    await previous.catch(() => undefined);
+    return await fn();
+  } finally {
+    release();
+    if (audioCacheLocks.get(lockKey) === chained) {
+      audioCacheLocks.delete(lockKey);
+    }
+  }
+}
+
+async function promoteAudioPart(partPath: string, finalPath: string): Promise<boolean> {
+  await deleteAudioCacheFile(finalPath);
+  try {
+    await Filesystem.rename({
+      from: partPath,
+      to: finalPath,
+      directory: Directory.Data,
+    });
+    return true;
+  } catch {
+    try {
+      await Filesystem.copy({
+        from: partPath,
+        to: finalPath,
+        directory: Directory.Data,
+      });
+      await deleteAudioCacheFile(partPath);
+      return true;
+    } catch {
+      await deleteAudioCacheFile(partPath);
+      await deleteAudioCacheFile(finalPath);
+      return false;
+    }
+  }
+}
+
+async function downloadAudioAtomically(
+  url: string,
+  finalPath: string,
+  options?: { minSizeBytes?: number; remoteSize?: number | null }
+): Promise<{ ok: boolean; size: number; error?: string }> {
+  const partPath = audioPartPath(finalPath);
+  const minSizeBytes = options?.minSizeBytes ?? 0;
+  let remoteSize = options?.remoteSize ?? null;
+
+  const parent = finalPath.split('/').slice(0, -1).join('/');
+  if (parent) {
+    await Filesystem.mkdir({
+      path: parent,
+      directory: Directory.Data,
+      recursive: true,
+    }).catch(() => {});
+  }
+
+  await deleteAudioCacheFile(partPath);
+
+  if (remoteSize == null) {
+    remoteSize = await getRemoteContentLength(url);
+  }
+
+  audioCacheLog('redownloading', { path: finalPath });
+
+  try {
+    await Filesystem.downloadFile({
+      url,
+      directory: Directory.Data,
+      path: partPath,
+      progress: false,
+    });
+
+    const partStat = await statAudioFile(partPath);
+    const downloadedSize = partStat?.size ?? 0;
+
+    if (downloadedSize <= 0) {
+      await deleteAudioCacheFile(partPath);
+      audioCacheLog('partial download removed', { path: partPath, size: downloadedSize });
+      return { ok: false, size: 0, error: 'Archivo descargado vacío' };
+    }
+
+    if (remoteSize && downloadedSize !== remoteSize) {
+      await deleteAudioCacheFile(partPath);
+      audioCacheLog('size mismatch', { path: partPath, localSize: downloadedSize, remoteSize });
+      audioCacheLog('partial download removed', { path: partPath, size: downloadedSize });
+      return {
+        ok: false,
+        size: 0,
+        error: `Tamaño incompleto (${downloadedSize} bytes, esperado ${remoteSize})`,
+      };
+    }
+
+    if (!remoteSize && minSizeBytes > 0 && downloadedSize < minSizeBytes) {
+      await deleteAudioCacheFile(partPath);
+      audioCacheLog('partial download removed', { path: partPath, size: downloadedSize });
+      return {
+        ok: false,
+        size: 0,
+        error: `Archivo corrupto o incompleto (${downloadedSize} bytes, mínimo ${minSizeBytes} bytes)`,
+      };
+    }
+
+    const promoted = await promoteAudioPart(partPath, finalPath);
+    if (!promoted) {
+      return { ok: false, size: 0, error: 'No se pudo promover el archivo descargado' };
+    }
+
+    audioCacheLog('download complete', { path: finalPath, size: downloadedSize });
+    return { ok: true, size: downloadedSize };
+  } catch (error) {
+    await deleteAudioCacheFile(partPath);
+    audioCacheLog('partial download removed', { path: partPath });
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, size: 0, error: message };
+  }
+}
+
+async function validateExistingAudio(
+  url: string,
+  finalPath: string,
+  options?: { minSizeBytes?: number; online?: boolean }
+): Promise<{ valid: boolean; size: number }> {
+  await deleteAudioCacheFile(audioPartPath(finalPath));
+
+  const existing = await statAudioFile(finalPath);
+  if (!existing || existing.size <= 0) {
+    return { valid: false, size: 0 };
+  }
+
+  if (options?.online === false) {
+    const minSizeBytes = options?.minSizeBytes ?? 0;
+    if (minSizeBytes > 0 && existing.size < minSizeBytes) {
+      return { valid: false, size: existing.size };
+    }
+    return { valid: true, size: existing.size };
+  }
+
+  const remoteSize = await getRemoteContentLength(url);
+  if (remoteSize && existing.size !== remoteSize) {
+    audioCacheLog('size mismatch', {
+      path: finalPath,
+      localSize: existing.size,
+      remoteSize,
+    });
+    await deleteAudioCacheFile(finalPath);
+    audioCacheLog('partial download removed', { path: finalPath, size: existing.size });
+    return { valid: false, size: 0 };
+  }
+
+  if (remoteSize && existing.size === remoteSize) {
+    audioCacheLog('valid', { path: finalPath, size: existing.size });
+    return { valid: true, size: existing.size };
+  }
+
+  const minSizeBytes = options?.minSizeBytes ?? 0;
+  if (minSizeBytes > 0 && existing.size < minSizeBytes) {
+    return { valid: false, size: existing.size };
+  }
+
+  return { valid: true, size: existing.size };
+}
+
 /**
  * Obtiene la extensión del archivo desde la URL
  */
@@ -234,50 +462,16 @@ async function downloadAudioNative(url: string, destPath: string): Promise<boole
     return false;
   }
 
-  // Asegurar carpeta padre (por si no existe)
-  const parent = destPath.split('/').slice(0, -1).join('/');
-  if (parent) {
-    await Filesystem.mkdir({
-      path: parent,
-      directory: Directory.Data,
-      recursive: true,
-    }).catch(() => {
-      // carpeta ya existe
-    });
-  }
-
-  try {
-    log('[AudioCache] usando Filesystem.downloadFile para:', url, '→', destPath);
-
-    const result = await Filesystem.downloadFile({
-      url,
-      directory: Directory.Data,
-      path: destPath,
-      progress: false,
-    });
-
-    // Verificar tamaño > 0
-    const stat = await Filesystem.stat({
-      path: destPath,
-      directory: Directory.Data,
-    });
-
-    if (!stat || !stat.size || stat.size <= 0) {
-      log('[downloadAudioNative] ❌ Archivo con tamaño 0 después de downloadFile:', destPath);
+  return withAudioCacheLock(destPath, async () => {
+    const result = await downloadAudioAtomically(url, destPath, { minSizeBytes: 0 });
+    if (!result.ok) {
+      log('[downloadAudioNative] ❌ Error descargando archivo', url, result.error);
       return false;
     }
 
-    log(
-      '[downloadAudioNative] ✅ Archivo descargado:',
-      destPath,
-      'bytes:',
-      stat.size,
-    );
+    log('[downloadAudioNative] ✅ Archivo descargado:', destPath, 'bytes:', result.size);
     return true;
-  } catch (error) {
-    log('[downloadAudioNative] ❌ Error descargando archivo', url, error);
-    return false;
-  }
+  });
 }
 
 export async function downloadAudioItem(
@@ -298,54 +492,48 @@ export async function downloadAudioItem(
   let path = options?.destPath ?? '';
 
   try {
-    const hash = await sha256(audioUrl);
+    const hash = await sha256AudioUrl(audioUrl);
     path = path || `imaginario/audio/${hash}.mp3`;
 
-    const parent = path.split('/').slice(0, -1).join('/');
-    if (parent) {
-      await Filesystem.mkdir({
-        path: parent,
-        directory: Directory.Data,
-        recursive: true,
-      }).catch(() => {
-        // carpeta ya existe
+    return await withAudioCacheLock(path, async () => {
+      log('[downloadAudioItem] ⬇️ Descargando:', audioUrl, '→', path);
+      options?.onProgress?.(0);
+
+      let online = true;
+      try {
+        const net = await Network.getStatus();
+        online = !!net.connected;
+      } catch {
+        online = true;
+      }
+
+      const existing = await validateExistingAudio(audioUrl, path, {
+        minSizeBytes,
+        online,
       });
-    }
+      if (existing.valid) {
+        options?.onProgress?.(100);
+        return { success: true, path, size: existing.size };
+      }
 
-    log('[downloadAudioItem] ⬇️ Descargando:', audioUrl, '→', path);
-    options?.onProgress?.(0);
+      const result = await downloadAudioAtomically(audioUrl, path, { minSizeBytes });
+      if (!result.ok) {
+        audioPersistenceDebug('delete requested', {
+          path,
+          reason: 'download-below-threshold',
+          size: result.size,
+          caller: 'downloadAudioItem',
+        });
+        logWarn('[downloadAudioItem] ❌', result.error, path);
+        return { success: false, path, size: 0, error: result.error };
+      }
 
-    await Filesystem.downloadFile({
-      url: audioUrl,
-      directory: Directory.Data,
-      path,
-      progress: false,
+      console.log('[mediaCache] audio descargado; limpieza automática omitida para preservar offline');
+      options?.onProgress?.(100);
+
+      log('[downloadAudioItem] ✅ Descarga completada:', path, 'bytes:', result.size);
+      return { success: true, path, size: result.size };
     });
-
-    const stat = await Filesystem.stat({
-      path,
-      directory: Directory.Data,
-    });
-    const size = stat?.size || 0;
-
-    if (size < minSizeBytes) {
-      audioPersistenceDebug('delete requested', {
-        path,
-        reason: 'download-below-threshold',
-        size,
-        caller: 'downloadAudioItem',
-      });
-      await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => {});
-      const error = `Archivo corrupto o incompleto (${size} bytes, mínimo ${minSizeBytes} bytes)`;
-      logWarn('[downloadAudioItem] ❌', error, path);
-      return { success: false, path, size: 0, error };
-    }
-
-    console.log('[mediaCache] audio descargado; limpieza automática omitida para preservar offline');
-    options?.onProgress?.(100);
-
-    log('[downloadAudioItem] ✅ Descarga completada:', path, 'bytes:', size);
-    return { success: true, path, size };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logError('[downloadAudioItem] ❌ Error descargando audio:', audioUrl, message);
@@ -483,45 +671,14 @@ async function downloadTo(path: string, url: string): Promise<boolean> {
     return false;
   }
 
-  // Asegurar carpeta padre (por si no existe)
-  const parent = path.split('/').slice(0, -1).join('/');
-  if (parent) {
-    await Filesystem.mkdir({
-      path: parent,
-      directory: Directory.Data,
-      recursive: true,
-    }).catch(() => {
-      // carpeta ya existe
-    });
-  }
-
-  try {
-    log('[AudioCache] usando Filesystem.downloadFile para:', url, '→', path);
-
-    const result = await Filesystem.downloadFile({
-      url,
-      directory: Directory.Data,
-      path,
-      progress: false,
-    });
-
-    // Verificar tamaño > 0
-    const stat = await Filesystem.stat({
-      path,
-      directory: Directory.Data,
-    });
-
-    if (!stat || !stat.size || stat.size <= 0) {
-      log('[downloadTo] ❌ Archivo con tamaño 0 después de downloadFile:', path);
-      return false;
-    }
-
-    log('[downloadTo] ✅ Archivo guardado en caché:', path, 'bytes:', stat.size);
-    return true;
-  } catch (error) {
-    log('[downloadTo] ❌ Error descargando archivo', url, error);
+  const result = await downloadAudioAtomically(url, path, { minSizeBytes: 0 });
+  if (!result.ok) {
+    log('[downloadTo] ❌ Error descargando archivo', url, result.error);
     return false;
   }
+
+  log('[downloadTo] ✅ Archivo guardado en caché:', path, 'bytes:', result.size);
+  return true;
 }
 
 /**
@@ -734,8 +891,6 @@ async function cacheImage(url?: string | null): Promise<string | undefined> {
 /**
  * Cachea un audio desde una URL (versión 2025-11 reforzada con verificación, retry y mutex).
  */
-const cacheLocks = new Map<string, Promise<string | undefined>>(); // evita escrituras simultáneas
-
 async function cacheAudio(url?: string | null): Promise<string | undefined> {
   if (!url) {
     log('[CacheAudio] URL vacía, retornando undefined');
@@ -748,67 +903,58 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
     return url;
   }
 
-  // 🧩 Hash único por URL
-  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
-  const hashHex = Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const hashHex = await sha256AudioUrl(url);
   const path = `imaginario/audio/${hashHex}.mp3`;
 
-  // 🧱 Mutex: si ya hay una escritura activa, esperar a que termine
-  while (cacheLocks.has(hashHex)) {
-    log(`[CacheAudio] ⏳ Esperando bloqueo activo para ${hashHex}`);
-    await cacheLocks.get(hashHex);
-  }
-
-  const lock = (async () => {
+  return withAudioCacheLock(path, async () => {
     try {
-      // ✅ Si ya existe, devolverlo
+      let online = true;
       try {
-        const stat = await Filesystem.stat({ path, directory: Directory.Data });
-        if (stat?.size && stat.size > 1024) {
-          log(`[CacheAudio] 🟢 Ya en caché (${(stat.size / 1024).toFixed(1)} KB)`);
-          return stat.uri || (await Filesystem.getUri({ path, directory: Directory.Data })).uri;
-        }
+        const net = await Network.getStatus();
+        online = !!net.connected;
       } catch {
-        // no existe, continúa
+        online = true;
       }
 
-      // 🌐 Descargar usando API nativa
+      const existing = await validateExistingAudio(url, path, {
+        minSizeBytes: 1024,
+        online,
+      });
+      if (existing.valid && existing.size > 1024) {
+        log(`[CacheAudio] 🟢 Ya en caché (${(existing.size / 1024).toFixed(1)} KB)`);
+        const uriRes = await Filesystem.getUri({ path, directory: Directory.Data });
+        return uriRes.uri;
+      }
+
+      if (!online) {
+        log('[CacheAudio] Sin conexión y sin archivo local válido');
+        return undefined;
+      }
+
       log(`[CacheAudio] ⬇️ Descargando (nativo): ${url}`);
 
       for (let attempt = 1; attempt <= 2; attempt++) {
-        const ok = await downloadAudioNative(url, path);
+        const result = await downloadAudioAtomically(url, path, { minSizeBytes: 1024 });
 
-        if (ok) {
-          const stat = await Filesystem.stat({ path, directory: Directory.Data });
-          if (stat?.size && stat.size > 1024) {
-            log(
-              `[CacheAudio] ✅ Guardado OK (${(stat.size / 1024).toFixed(1)} KB): ${path}`,
-            );
-            return (
-              stat.uri ||
-              (await Filesystem.getUri({ path, directory: Directory.Data })).uri
-            );
-          }
-
-          console.warn(
-            `[CacheAudio] ⚠️ Archivo sospechoso (${stat?.size || 0} bytes), reintentando (${attempt})`,
+        if (result.ok && result.size > 1024) {
+          log(
+            `[CacheAudio] ✅ Guardado OK (${(result.size / 1024).toFixed(1)} KB): ${path}`,
           );
-          audioPersistenceDebug('delete requested', {
-            path,
-            reason: 'cache-audio-below-1kb',
-            size: stat?.size || 0,
-            caller: 'cacheAudio',
-          });
-          await Filesystem.deleteFile({ path, directory: Directory.Data }).catch(
-            () => {},
-          );
-        } else {
-          console.warn(
-            `[CacheAudio] ❌ Falla en downloadAudioNative (intento ${attempt}) para ${url}`,
-          );
+          const uriRes = await Filesystem.getUri({ path, directory: Directory.Data });
+          return uriRes.uri;
         }
+
+        console.warn(
+          `[CacheAudio] ⚠️ Archivo sospechoso (${result.size || 0} bytes), reintentando (${attempt})`,
+        );
+        audioPersistenceDebug('delete requested', {
+          path,
+          reason: 'cache-audio-below-1kb',
+          size: result.size || 0,
+          caller: 'cacheAudio',
+        });
+        await deleteAudioCacheFile(path);
+        await deleteAudioCacheFile(audioPartPath(path));
 
         if (attempt < 2) {
           await new Promise((r) => setTimeout(r, 300));
@@ -822,13 +968,8 @@ async function cacheAudio(url?: string | null): Promise<string | undefined> {
       console.error('[CacheAudio] ❌ Error general:', url, err);
       console.warn(`[DebugCacheAudio] Fallo al guardar: ${url}`);
       return undefined;
-    } finally {
-      cacheLocks.delete(hashHex); // liberar el bloqueo
     }
-  })();
-
-  cacheLocks.set(hashHex, lock);
-  return await lock;
+  });
 }
 
 // ✅ Helper para reintentar descarga de imágenes corruptas
@@ -872,51 +1013,59 @@ export async function ensureCachedMedia(url?: string | null, type: 'audio' | 'im
     const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
     if (!isNative) return url;
 
-    const hash = await sha256(url);
-    const ext = type === 'image' ? '.jpg' : '.mp3';
-    
     const { Network } = await import('@capacitor/network');
     const net = await Network.getStatus();
     const isOffline = !net.connected;
-    
-    const relPath = `imaginario/${type === 'image' ? 'images' : 'audio'}/${hash}${ext}`;
 
-    // ¿Ya existe?
-    const existing = await Filesystem.stat({ path: relPath, directory: Directory.Data }).catch(() => null);
-    if (!existing) {
-      // 🔹 Si estamos online → descargar archivo
-      if (!isOffline) {
-        const ok = type === "image" 
-          ? await downloadImageStreaming(relPath, url)
-          : await downloadTo(relPath, url);
-        
-        // Si la descarga falla estando online → devolver URL remota como fallback
-        if (!ok) return url;
-        
-        // Verificar corrupción (solo para imágenes)
-        if (type === "image") {
-          const retryResult = await retryDownloadIfCorrupt(url, relPath);
-          if (retryResult === url) {
+    if (type === 'audio') {
+      const hash = await sha256AudioUrl(url);
+      const relPath = `imaginario/audio/${hash}.mp3`;
+
+      return await withAudioCacheLock(relPath, async () => {
+        const existing = await validateExistingAudio(url, relPath, {
+          minSizeBytes: 0,
+          online: !isOffline,
+        });
+
+        if (!existing.valid) {
+          if (isOffline) {
             return url;
           }
+
+          const ok = await downloadTo(relPath, url);
+          if (!ok) return url;
         }
-        // ✅ CAMBIO: Para ambos tipos (imagen y audio), continuar al final para obtener URI local
-        // No retornar url aquí, dejar que fluya a la resolución de URI
+
+        const uriRes = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
+        const fileUri = uriRes?.uri?.startsWith('file://') ? uriRes.uri : `file://${uriRes?.uri}`;
+        log(`[ensureCachedMedia] ▶️ URI local lista (${type}):`, fileUri);
+        return fileUri;
+      });
+    }
+
+    const hash = await sha256(url);
+    const relPath = `imaginario/images/${hash}.jpg`;
+
+    const existing = await Filesystem.stat({ path: relPath, directory: Directory.Data }).catch(() => null);
+    if (!existing) {
+      if (!isOffline) {
+        const ok = await downloadImageStreaming(relPath, url);
+        if (!ok) return url;
+
+        const retryResult = await retryDownloadIfCorrupt(url, relPath);
+        if (retryResult === url) {
+          return url;
+        }
       } else {
-        // 🔹 Si estamos offline y NO existe archivo → devolver URL remota como fallback
         return url;
       }
     }
 
-    // Resolver URI nativa segura (tanto para imágenes como audios)
-    // Verificar corrupción antes de obtener URI (solo para imágenes existentes)
-    if (type === "image") {
-      const retryResult = await retryDownloadIfCorrupt(url, relPath);
-      if (retryResult !== relPath) {
-        return url; // Archivo corrupto y no se pudo recuperar
-      }
+    const retryResult = await retryDownloadIfCorrupt(url, relPath);
+    if (retryResult !== relPath) {
+      return url;
     }
-    
+
     const uriRes = await Filesystem.getUri({ path: relPath, directory: Directory.Data });
     const fileUri = uriRes?.uri?.startsWith('file://') ? uriRes.uri : `file://${uriRes?.uri}`;
     log(`[ensureCachedMedia] ▶️ URI local lista (${type}):`, fileUri);
@@ -1033,30 +1182,17 @@ async function ensureAudioDir() {
 async function downloadAudioStream(url: string, destPath: string): Promise<void> {
   await ensureAudioDir();
 
-  try {
-    log('[AudioCache] usando Filesystem.downloadFile para archivo grande:', url, '→', destPath);
+  const result = await withAudioCacheLock(destPath, async () => {
+    return downloadAudioAtomically(url, destPath, { minSizeBytes: 0 });
+  });
 
-    await Filesystem.downloadFile({
-      url,
-      directory: Directory.Data,
-      path: destPath,
-      progress: false,
-    });
-
-    // 🔁 Verificación post-escritura
-    try {
-      const stat = await Filesystem.stat({ path: destPath, directory: Directory.Data });
-      console.log(`[StreamSave] ✅ Guardado OK (${(stat.size / 1024 / 1024).toFixed(2)} MB) en ${destPath}`);
-    } catch {
-      console.error(`[StreamSave] ⚠️ No se pudo verificar escritura de ${destPath}`);
-    }
-
-    // 🧹 Aplicar límite global del caché
-    await enforceCacheLimit();
-  } catch (error) {
-    console.error(`[StreamSave] ❌ Error descargando archivo grande: ${url}`, error);
-    throw error;
+  if (!result.ok) {
+    console.error(`[StreamSave] ❌ Error descargando archivo grande: ${url}`, result.error);
+    throw new Error(result.error || 'Error descargando archivo grande');
   }
+
+  console.log(`[StreamSave] ✅ Guardado OK (${(result.size / 1024 / 1024).toFixed(2)} MB) en ${destPath}`);
+  await enforceCacheLimit();
 }
 
 /**
@@ -1084,32 +1220,32 @@ export async function verifyAudioCache(): Promise<{ total: number; missing: numb
     for (const track of tracks) {
       const url = track.audio_url;
       if (!url) continue;
-      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
-      const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const hashHex = await sha256AudioUrl(url);
       const path = `imaginario/audio/${hashHex}.mp3`;
 
-      try {
-        const stat = await Filesystem.stat({ path, directory: Directory.Data });
-        if (!stat.size || stat.size < 100) throw new Error('Archivo vacío');
-      } catch {
-        missing++;
-        console.warn(`[VerifyCache] ❌ Faltante: ${url}`);
+      const existing = await validateExistingAudio(url, path, {
+        minSizeBytes: 100,
+        online: isOnline,
+      });
+      if (existing.valid) {
+        continue;
+      }
 
-        if (isOnline) {
-          try {
-            const head = await fetch(url, { method: 'HEAD' });
-            const contentLength = parseInt(head.headers.get('content-length') || '0');
-            if (contentLength > 10 * 1024 * 1024) {
-              await downloadAudioStream(url, path);
-            } else {
-              await cacheAudio(url);
-            }
-            // 🧹 Aplicar límite del caché tras descarga individual
-            await enforceCacheLimit();
-            refreshed++;
-          } catch (err) {
-            console.error(`[VerifyCache] ⚠️ Error al recuperar ${url}`, err);
+      missing++;
+      console.warn(`[VerifyCache] ❌ Faltante: ${url}`);
+
+      if (isOnline) {
+        try {
+          const contentLength = await getRemoteContentLength(url);
+          if (contentLength && contentLength > 10 * 1024 * 1024) {
+            await downloadAudioStream(url, path);
+          } else {
+            await cacheAudio(url);
           }
+          await enforceCacheLimit();
+          refreshed++;
+        } catch (err) {
+          console.error(`[VerifyCache] ⚠️ Error al recuperar ${url}`, err);
         }
       }
     }
@@ -1175,58 +1311,42 @@ export async function verifyAudioCacheWithProgress(
 
       console.log(`[DebugVerify] Revisión ${checked + 1}/${total} → ${url}`);
 
-      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
-      const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const hashHex = await sha256AudioUrl(url);
       const path = `imaginario/audio/${hashHex}.mp3`;
       const audioType = audio.audio_type || 'unknown';
 
-      // Verificar si el archivo existe y tiene tamaño válido
-      let fileExists = false;
-      let fileSizeValid = false;
-      let verifySize = 0;
+      const existing = await validateExistingAudio(url, path, {
+        minSizeBytes: MIN_SIZE_BYTES,
+        online: isOnline,
+      });
 
-      try {
-        const stat = await Filesystem.stat({ path, directory: Directory.Data });
-        
-        if (stat?.size) {
-          fileExists = true;
-          verifySize = stat.size;
-          
-          // Verificar tamaño mínimo
-          if (stat.size >= MIN_SIZE_BYTES) {
-            // Archivo válido y completo
-            fileSizeValid = true;
-            completed++;
-            checked++;
-            console.log(`[VerifyAudio] ✅ Audio completo: ${url} (${(stat.size / 1024).toFixed(1)} KB)`);
-            audioPersistenceDebug('verify', {
-              id: audio.id,
-              type: audioType,
-              url,
-              expectedPath: path,
-              exists: true,
-              size: verifySize,
-              threshold: MIN_SIZE_BYTES,
-              action: 'keep',
-            });
-            notifyProgress();
-            continue;
-          } else {
-            // Archivo existe pero es muy pequeño (incompleto)
-            fileSizeValid = false;
-            console.warn(`[DebugVerify] Archivo sospechoso o vacío: ${path} (tamaño: ${stat.size} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
-            console.warn(`[VerifyAudio] ⚠️ Audio incompleto: ${url} (${stat.size} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
-          }
-        } else {
-          // Archivo existe pero no tiene tamaño
-          fileExists = true;
-          fileSizeValid = false;
-        }
-      } catch (statError) {
-        // Archivo no existe
-        fileExists = false;
-        fileSizeValid = false;
+      let fileExists = existing.size > 0 || existing.valid;
+      let fileSizeValid = existing.valid;
+      let verifySize = existing.size;
+
+      if (fileSizeValid) {
+        completed++;
+        checked++;
+        console.log(`[VerifyAudio] ✅ Audio completo: ${url} (${(verifySize / 1024).toFixed(1)} KB)`);
+        audioPersistenceDebug('verify', {
+          id: audio.id,
+          type: audioType,
+          url,
+          expectedPath: path,
+          exists: true,
+          size: verifySize,
+          threshold: MIN_SIZE_BYTES,
+          action: 'keep',
+        });
+        notifyProgress();
+        continue;
+      }
+
+      if (!fileExists) {
         console.log(`[DebugVerify] Archivo no existe: ${path}`);
+      } else {
+        console.warn(`[DebugVerify] Archivo sospechoso o vacío: ${path} (tamaño: ${verifySize} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
+        console.warn(`[VerifyAudio] ⚠️ Audio incompleto: ${url} (${verifySize} bytes, mínimo requerido: ${MIN_SIZE_BYTES} bytes)`);
       }
 
       // Si el archivo no existe o es incompleto, intentar descargarlo
@@ -1443,7 +1563,7 @@ async function processAudioItem(
   // Caso 2: Con URL - calcular hash y verificar archivo
   try {
     // Generar hash SHA-256 de la URL (misma lógica que usa mediaCacheService)
-    const hash = await sha256(audio.audio_url);
+    const hash = await sha256AudioUrl(audio.audio_url);
     const expectedPath = `imaginario/audio/${hash}.mp3`;
 
     // Verificar si el archivo existe
