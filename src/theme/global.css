@@ -112,11 +112,18 @@ p {
 /* END COLORS */
 
 /* BUTTONS */
+  button {
+    color: inherit;
+  }
   button.btn-i {
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 9vw;
+    color: #ffffff;
+    background-color: #0A3731;
+    -webkit-appearance: none;
+    appearance: none;
   }
   @media(max-width:1199px) and (min-width:992px) {
     button.btn-i {

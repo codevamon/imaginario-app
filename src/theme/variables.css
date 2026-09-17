@@ -1,6 +1,15 @@
 /* For information on how to create your own theme, please see:
 http://ionicframework.com/docs/theming/ */
 
+:root {
+  --ion-color-primary: #0A3731;
+  --ion-color-primary-rgb: 10, 55, 49;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #082e29;
+  --ion-color-primary-tint: #224944;
+}
+
 /* Custom chip styles */
 .chip-small {
   font-size: 12px;
