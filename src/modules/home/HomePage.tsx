@@ -4,12 +4,11 @@ import {
   IonButtons, IonButton, IonIcon, IonSearchbar, IonSpinner,
   IonToast, IonChip, IonText, IonRefresher, IonRefresherContent
 } from '@ionic/react';
-import { Preferences } from '@capacitor/preferences';
 import { Network } from '@capacitor/network';
 import { filter, refresh } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
-import { pullAllTables, resyncAllTables } from '../../core/sync/pull';
+import { pullAllTables, resyncAllTables, CATALOG_SYNC_COMPLETE_EVENT, CATALOG_SYNC_FINISHED_EVENT, getCatalogBootstrapState } from '../../core/sync/pull';
 import { listBirds, type Bird } from '../../core/db/dao/birds';
 import { getTracksByBirdId, type Track } from '../../core/db/dao/tracks';
 import { getAllSings, type Sing } from '../../core/db/dao/sings';
@@ -35,28 +34,58 @@ export default function HomePage() {
   const [syncMessage, setSyncMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
   const refreshInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  const bootstrapFinishedRef = useRef(false);
+  const loadGenerationRef = useRef(0);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    mountedRef.current = true;
 
-  // Auto-refresh: solo una vez por sesión al abrir la app
-  useEffect(() => {
-    let timer: any;
-    const triggerAutoRefresh = async () => {
-      const { value } = await Preferences.get({ key: 'hasRefreshedOnce' });
-      if (!value) {
-        timer = setTimeout(async () => {
-          const refresher = document.querySelector('ion-refresher');
-          if (refresher) {
-            refresher.dispatchEvent(new CustomEvent('ionRefresh', { bubbles: true }));
-            await Preferences.set({ key: 'hasRefreshedOnce', value: 'true' });
-          }
-        }, 2000);
-      }
+    const onCatalogSyncComplete = () => {
+      void loadData({ showLoading: false });
     };
-    triggerAutoRefresh();
-    return () => clearTimeout(timer);
+
+    const onCatalogSyncFinished = (event: Event) => {
+      const success = (event as CustomEvent<{ success?: boolean }>).detail?.success === true;
+      bootstrapFinishedRef.current = true;
+      void (async () => {
+        try {
+          if (success) {
+            await loadData({ showLoading: false });
+          }
+        } finally {
+          if (mountedRef.current) {
+            setLoading(false);
+          }
+        }
+      })();
+    };
+
+    window.addEventListener(CATALOG_SYNC_COMPLETE_EVENT, onCatalogSyncComplete);
+    window.addEventListener(CATALOG_SYNC_FINISHED_EVENT, onCatalogSyncFinished);
+
+    void (async () => {
+      await loadData();
+
+      const bootstrap = getCatalogBootstrapState();
+      if (!mountedRef.current) return;
+
+      if (bootstrap.finished) {
+        bootstrapFinishedRef.current = true;
+        if (bootstrap.success) {
+          await loadData({ showLoading: false });
+        }
+        if (mountedRef.current) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener(CATALOG_SYNC_COMPLETE_EVENT, onCatalogSyncComplete);
+      window.removeEventListener(CATALOG_SYNC_FINISHED_EVENT, onCatalogSyncFinished);
+    };
   }, []);
 
   function goDiscover(q?: string) {
@@ -200,6 +229,8 @@ export default function HomePage() {
 
   async function loadData(options?: { showLoading?: boolean }) {
     const showLoading = options?.showLoading ?? true;
+    const generation = ++loadGenerationRef.current;
+    let hasLocalCatalog = false;
     try {
       if (showLoading) {
         setLoading(true);
@@ -212,11 +243,17 @@ export default function HomePage() {
         listBirds({ popularity: 'desc', order: 'name' })
       ]);
 
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
+
       // adjuntar la primera imagen de bird_images cuando exista
       const [fWithImages, pWithImages] = await Promise.all([
         attachFirstImages(Array.isArray(featuredBirds) ? featuredBirds : []),
         attachFirstImages(Array.isArray(popularBirds) ? popularBirds : [])
       ]);
+
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
+
+      hasLocalCatalog = (fWithImages || []).length > 0;
 
       setFeatured((fWithImages || []).slice(0, 8));
       setPopular((pWithImages || []).slice(0, 8));
@@ -243,21 +280,26 @@ export default function HomePage() {
         console.warn('[HomePage] Error cargando tracks globales:', err);
       }
 
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
+
       setTracks(sampleTracks);
       
       // Cargar sings de muestra
       try {
         const s = await getAllSings();
         console.warn('[home] cargados', s.length, 'sings');
+        if (!mountedRef.current || generation !== loadGenerationRef.current) return;
         setSings(s);
       } catch (err) {
         console.warn('[HomePage] no se pudieron traer sings', err);
+        if (!mountedRef.current || generation !== loadGenerationRef.current) return;
         setSings([]);
       }
       
       console.log('[HomePage] ✅ Datos cargados desde SQLite local (con imágenes adjuntas)');
     } catch (error) {
       console.error('[HomePage] ❌ Error cargando datos desde SQLite:', error);
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
       if (showLoading) {
         setFeatured([]);
         setPopular([]);
@@ -265,8 +307,10 @@ export default function HomePage() {
         throw error;
       }
     } finally {
-      if (showLoading) {
-        setLoading(false);
+      if (showLoading && mountedRef.current && generation === loadGenerationRef.current) {
+        if (hasLocalCatalog || bootstrapFinishedRef.current) {
+          setLoading(false);
+        }
       }
     }
   }
@@ -293,16 +337,16 @@ export default function HomePage() {
     <IonPage>
 
       <IonContent fullscreen>
-        <WelcomeWidget />
-
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon="arrow-down-circle-outline"
             refreshingSpinner="crescent"
-            pullingText="Desliza para resync completo"
-            refreshingText="Sincronizando..."
+            pullingText="Desliza para actualizar"
+            refreshingText="Actualizando..."
           />
         </IonRefresher>
+
+        <WelcomeWidget />
 
         {/* saludo y search omitted for brevity — usa tu markup anterior */}
 

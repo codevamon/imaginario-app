@@ -27,7 +27,8 @@ import ProfilePage from './modules/profile/ProfilePage';
 import SyncCenter from './modules/synccenter/SyncCenter';
 import AboutPage from './modules/about/AboutPage';
 import { initDb, resetDb, isDbReady } from './core/sqlite';
-import { pullAllTables } from './core/sync/pull';
+import { pullAllTables, emitCatalogSyncOutcome, markCatalogSyncStarted } from './core/sync/pull';
+import { getLocalDataSummary } from './core/sync/localDataSummary';
 import Footbar from './ui/Footbar';
 import { Network } from '@capacitor/network';
 import { PluginListenerHandle } from '@capacitor/core';
@@ -37,6 +38,33 @@ import './theme/global.css';
 import TestCachePage from './pages/TestCachePage';
 
 setupIonicReact();
+
+let catalogPullInFlight = false;
+
+async function pullCatalogAndNotify(): Promise<void> {
+  if (catalogPullInFlight) {
+    console.log('[App] ⏳ Pull de catálogo ya en curso, se omite duplicado');
+    return;
+  }
+
+  catalogPullInFlight = true;
+  markCatalogSyncStarted();
+  try {
+    const result = await pullAllTables();
+    const success = result?.success === true;
+    emitCatalogSyncOutcome(success);
+    if (success) {
+      console.log('[App] ✅ Sync de catálogo completada');
+    } else {
+      console.warn('[App] ⚠️ Sync de catálogo no exitosa:', result?.errors);
+    }
+  } catch (syncError) {
+    emitCatalogSyncOutcome(false);
+    console.warn('[App] ⚠️ Sync de catálogo falló, app continúa:', syncError);
+  } finally {
+    catalogPullInFlight = false;
+  }
+}
 
 // Layout de Tabs (v5)
 const Tabs: React.FC = () => (
@@ -98,13 +126,8 @@ const App: React.FC = () => {
         setDbReady(true);
         console.log('[App] ✅ Base de datos lista y funcionando correctamente');
         
-        // Sincronización automática inicial
-        try {
-          await pullAllTables();
-          console.log('[App] ✅ Sync inicial completada');
-        } catch (syncError) {
-          console.warn('[App] ⚠️ Sync inicial falló, app continúa:', syncError);
-        }
+        // Sincronización automática inicial (no bloquea dbReady / UI)
+        await pullCatalogAndNotify();
       } catch (error) {
         console.error('[App] ❌ Error inicializando base de datos:', error);
         setDbError((error as Error).message);
@@ -159,6 +182,16 @@ const App: React.FC = () => {
           verifyAudioCacheWithProgress().catch((err) => {
             console.error('[Network] ⚠️ Error en verificación automática de audios:', err);
           });
+
+          try {
+            const summary = await getLocalDataSummary();
+            if (summary.birds === 0) {
+              console.log('[Network] 📭 Catálogo local vacío. Intentando pull...');
+              await pullCatalogAndNotify();
+            }
+          } catch (err) {
+            console.error('[Network] ⚠️ Error comprobando/sincronizando catálogo:', err);
+          }
         }
       });
     })();

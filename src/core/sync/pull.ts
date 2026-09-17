@@ -20,6 +20,54 @@ type PullResult = {
   errors: string[];
 };
 
+export const CATALOG_SYNC_COMPLETE_EVENT = 'imaginario:catalog-sync-complete';
+export const CATALOG_SYNC_FINISHED_EVENT = 'imaginario:catalog-sync-finished';
+
+export type CatalogSyncFinishedDetail = {
+  success: boolean;
+};
+
+type CatalogBootstrapState = {
+  inFlight: boolean;
+  finished: boolean;
+  success: boolean;
+};
+
+let catalogBootstrapState: CatalogBootstrapState = {
+  inFlight: false,
+  finished: false,
+  success: false,
+};
+
+export function getCatalogBootstrapState(): CatalogBootstrapState {
+  return { ...catalogBootstrapState };
+}
+
+export function markCatalogSyncStarted(): void {
+  catalogBootstrapState = {
+    ...catalogBootstrapState,
+    inFlight: true,
+  };
+}
+
+export function emitCatalogSyncOutcome(success: boolean): void {
+  catalogBootstrapState = {
+    inFlight: false,
+    finished: true,
+    success,
+  };
+
+  if (success) {
+    window.dispatchEvent(new CustomEvent(CATALOG_SYNC_COMPLETE_EVENT));
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<CatalogSyncFinishedDetail>(CATALOG_SYNC_FINISHED_EVENT, {
+      detail: { success },
+    })
+  );
+}
+
 // Configuración de sincronización
 const SYNC_CONFIG = {
   pageSize: 200, // Reducido para evitar problemas de payload
