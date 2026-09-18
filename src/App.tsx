@@ -115,17 +115,13 @@ const App: React.FC = () => {
       try {
         console.log('[App] 🚀 Inicializando base de datos...');
         
-        // Verificar si ya está inicializada
-        if (isDbReady()) {
-          console.log('[App] ✅ Base de datos ya está lista');
-          setDbReady(true);
-          return;
+        if (!isDbReady()) {
+          await initDb();
         }
-        
-        await initDb();
+
         setDbReady(true);
         console.log('[App] ✅ Base de datos lista y funcionando correctamente');
-        
+
         // Sincronización automática inicial (no bloquea dbReady / UI)
         await pullCatalogAndNotify();
       } catch (error) {

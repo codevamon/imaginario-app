@@ -20,6 +20,7 @@ import SingsWidget from './widgets/SingsWidget';
 import 'swiper/css';
 import AboutWidget from './widgets/AboutWidget';
 import ContactWidget from '../../ui/ContactWidget';
+import './HomePage.css';
 
 export default function HomePage() {
   const router = useIonRouter();
@@ -45,14 +46,11 @@ export default function HomePage() {
       void loadData({ showLoading: false });
     };
 
-    const onCatalogSyncFinished = (event: Event) => {
-      const success = (event as CustomEvent<{ success?: boolean }>).detail?.success === true;
+    const onCatalogSyncFinished = () => {
       bootstrapFinishedRef.current = true;
       void (async () => {
         try {
-          if (success) {
-            await loadData({ showLoading: false });
-          }
+          await loadData({ showLoading: false });
         } finally {
           if (mountedRef.current) {
             setLoading(false);
@@ -72,9 +70,7 @@ export default function HomePage() {
 
       if (bootstrap.finished) {
         bootstrapFinishedRef.current = true;
-        if (bootstrap.success) {
-          await loadData({ showLoading: false });
-        }
+        await loadData({ showLoading: false });
         if (mountedRef.current) {
           setLoading(false);
         }
@@ -336,11 +332,9 @@ export default function HomePage() {
   return (
     <IonPage>
 
-      <IonContent fullscreen>
-        <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
+      <IonContent>
+        <IonRefresher slot="fixed" className="home-refresher-i" onIonRefresh={handleRefresh}>
           <IonRefresherContent
-            pullingIcon="arrow-down-circle-outline"
-            refreshingSpinner="crescent"
             pullingText="Desliza para actualizar"
             refreshingText="Actualizando..."
           />

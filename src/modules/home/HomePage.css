@@ -1,0 +1,5 @@
+/* Desplaza solo el indicador nativo de IonRefresher bajo el safe-area iOS.
+   El host es position:absolute; top:0 — no hay Shadow DOM en ion-refresher. */
+.ios ion-refresher.home-refresher-i {
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+}
