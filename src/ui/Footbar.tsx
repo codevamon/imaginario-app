@@ -1,7 +1,7 @@
 import React from 'react';
-import { IonIcon, useIonRouter } from '@ionic/react';
+import { useIonRouter } from '@ionic/react';
 import { useLocation } from 'react-router-dom';
-import { downloadOutline } from 'ionicons/icons';
+import GlobalAudioWidget from './GlobalAudioWidget';
 import './Footbar.css';
 
 const Footbar: React.FC = () => {
@@ -13,7 +13,9 @@ const Footbar: React.FC = () => {
   };
 
   return (
-    <footer className="footbar">
+    <div className="persistent-bottom-chrome">
+      <GlobalAudioWidget />
+      <footer className="footbar">
       <div className="footbar-inner ">
         <div 
           className={`item-home footbar-item ${isActive('/home') ? 'active' : ''}`} 
@@ -100,6 +102,7 @@ const Footbar: React.FC = () => {
       </div>
 
     </footer>
+    </div>
   );
 };
 

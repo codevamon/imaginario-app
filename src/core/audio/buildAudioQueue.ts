@@ -1,7 +1,11 @@
 // src/core/audio/buildAudioQueue.ts
 // Builders puros: convierten entidades DAO en AudioQueueItem[] sin tocar runtime.
 
-import type { AudioQueueItem } from './player';
+import type {
+  AudioQueueItem,
+  AudioPlayMetadata,
+  AudioSessionSnapshot,
+} from './player';
 import type { Sing } from '../db/dao/sings';
 import type { Track } from '../db/dao/tracks';
 import type { Interview } from '../db/dao/interviews';
@@ -12,6 +16,61 @@ export type BuildInterviewsQueueOptions = {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+/** True si pause/resume/toggle de la misma pista en la misma sesión. */
+export function isSameTrackAudioSession(
+  snapshot: AudioSessionSnapshot,
+  trackId: string
+): boolean {
+  return (
+    snapshot.currentId === trackId &&
+    (snapshot.status === 'playing' ||
+      snapshot.status === 'paused' ||
+      snapshot.status === 'loading')
+  );
+}
+
+/**
+ * Omitir setQueue solo si es la misma pista activa Y la cola (ids/orden) no cambia.
+ * Si el mismo audio se elige desde otro listado, la cola sí se reemplaza.
+ */
+export function shouldSkipSetQueue(
+  snapshot: AudioSessionSnapshot,
+  trackId: string,
+  nextQueue: AudioQueueItem[],
+  currentQueue: AudioQueueItem[]
+): boolean {
+  if (!isSameTrackAudioSession(snapshot, trackId)) {
+    return false;
+  }
+  if (nextQueue.length !== currentQueue.length) {
+    return false;
+  }
+  for (let i = 0; i < nextQueue.length; i++) {
+    if (nextQueue[i].id !== currentQueue[i]?.id) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Cola de un solo elemento (traducciones u otros audios aislados). */
+export function buildSingleAudioQueue(item: {
+  id: string;
+  src: string;
+  metadata?: AudioPlayMetadata;
+}): AudioQueueItem[] {
+  if (!isNonEmptyString(item?.id) || !isNonEmptyString(item?.src)) {
+    return [];
+  }
+  return [
+    {
+      id: item.id,
+      src: item.src,
+      metadata: item.metadata,
+    },
+  ];
 }
 
 export function buildSingsQueue(sings: Sing[]): AudioQueueItem[] {

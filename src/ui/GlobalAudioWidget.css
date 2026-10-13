@@ -1,0 +1,242 @@
+/* GlobalAudioWidget — alineado a Footbar (#073A35 / #B6DB78 / #0A3731) */
+
+.global-audio-widget {
+  width: 95%;
+  max-width: 500px;
+  box-sizing: border-box;
+  background-color: #073A35;
+  color: #ffffff;
+  border-radius: 20px;
+  padding: 10px 14px 12px;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Scroll vertical de la página; el gesto Ionic captura el eje X. */
+  touch-action: pan-y;
+  will-change: transform, opacity;
+}
+
+.global-audio-widget.is-swiping {
+  transition: none;
+}
+
+.global-audio-widget.is-dismissing,
+.global-audio-widget.is-restoring {
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-audio-widget.is-dismissing,
+  .global-audio-widget.is-restoring {
+    transition: none;
+  }
+}
+
+.global-audio-widget.is-error {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.45);
+}
+
+.gaw-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.gaw-meta {
+  gap: 10px;
+  min-height: 40px;
+}
+
+.gaw-artwork {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gaw-artwork-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gaw-artwork-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #B6DB78;
+  font-size: 20px;
+}
+
+.gaw-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gaw-title {
+  font-family: var(--font-family-base, 'IBM Plex Sans', system-ui, sans-serif);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gaw-artist {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gaw-error-hint {
+  font-size: 0.7rem;
+  color: #f59e0b;
+}
+
+.gaw-spinner {
+  width: 22px;
+  height: 22px;
+  color: #B6DB78;
+  flex-shrink: 0;
+}
+
+.gaw-progress {
+  gap: 8px;
+  /* Zona táctil cómoda sin hinchar el layout del widget. */
+  min-height: 28px;
+}
+
+.gaw-time {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.4em;
+}
+
+.gaw-time:last-child {
+  text-align: right;
+}
+
+/* IonRange estilizado como la barra discreta anterior */
+.gaw-scrubber {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding-inline: 0;
+  --height: 28px;
+  --bar-height: 3px;
+  --bar-border-radius: 999px;
+  --bar-background: rgba(255, 255, 255, 0.18);
+  --bar-background-active: #B6DB78;
+  --knob-size: 14px;
+  --knob-background: #B6DB78;
+  --knob-box-shadow: 0 0 0 2px rgba(7, 58, 53, 0.35);
+  --knob-border-radius: 50%;
+}
+
+.gaw-scrubber.is-scrubbing {
+  --knob-size: 16px;
+}
+
+.gaw-scrubber.range-disabled {
+  opacity: 0.45;
+}
+
+.gaw-scrubber::part(tick),
+.gaw-scrubber::part(tick-active) {
+  display: none;
+}
+
+.gaw-controls {
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.gaw-btn {
+  position: relative;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  font-size: 22px;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.gaw-btn:focus-visible {
+  outline: 2px solid #B6DB78;
+  outline-offset: 2px;
+}
+
+.gaw-btn:active:not(:disabled) {
+  opacity: 0.75;
+}
+
+.gaw-btn:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.gaw-btn-main {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  background: #B6DB78;
+  color: #0A3731;
+  font-size: 26px;
+}
+
+.gaw-btn-main:disabled {
+  background: rgba(182, 219, 120, 0.35);
+  color: rgba(10, 55, 49, 0.55);
+  opacity: 1;
+}
+
+.gaw-btn-main ion-spinner {
+  width: 22px;
+  height: 22px;
+  color: #0A3731;
+}
+
+.gaw-seek-label {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 1;
+  color: inherit;
+  pointer-events: none;
+}
+
+/* Reserva inferior condicional (App inyecta --persistent-chrome-pad) */
+html.audio-widget-visible,
+body.audio-widget-visible {
+  --persistent-chrome-pad: 210px;
+}

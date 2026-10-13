@@ -5,6 +5,10 @@ import { IonIcon, IonText, IonSpinner } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
 import type { Sing } from '../../../core/db/dao/sings';
 import { audioManager } from '../../../core/audio/player';
+import {
+  buildSingsQueue,
+  shouldSkipSetQueue,
+} from '../../../core/audio/buildAudioQueue';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
@@ -151,21 +155,18 @@ const SingsWidget: React.FC<Props> = ({
     const sing = displaySings.find((s) => s.id === singId);
     onBeforePlay?.(singId);
     if (!onBeforePlay) {
-      const queue = displaySings
-        .filter((s) => !!s.id && !!s.audio_url)
-        .map((s) => ({
-          id: s.id,
-          src: s.audio_url!,
-          metadata: {
-            title: s.title || 'Canto sin título',
-            artist:
-              s.author ||
-              s.community ||
-              s.interpreters ||
-              'Imaginario',
-          },
-        }));
-      audioManager.setQueue(queue, singId);
+      const queue = buildSingsQueue(displaySings);
+      if (
+        queue.length > 0 &&
+        !shouldSkipSetQueue(
+          audioManager.getSessionSnapshot(),
+          singId,
+          queue,
+          audioManager.getQueue()
+        )
+      ) {
+        audioManager.setQueue(queue, singId);
+      }
     }
     audioManager.toggle(singId, url, {
       title: sing?.title || 'Canto sin título',

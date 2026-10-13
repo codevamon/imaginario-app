@@ -308,7 +308,11 @@ export default App;
 // Estilos para asegurar que el Footbar quede encima del contenido
 // pero no tape modales ni toasts
 const footbarStyles = `
-  ion-footer, .footbar-container {
+  :root {
+    --persistent-chrome-pad: 80px;
+  }
+
+  ion-footer, .footbar-container, .persistent-bottom-chrome {
     z-index: 1000;
   }
   
@@ -321,14 +325,14 @@ const footbarStyles = `
     z-index: 10001;
   }
   
-  /* Asegurar que el contenido no se tape con el footbar */
+  /* Reserva inferior: footbar; con widget visible se eleva vía .audio-widget-visible */
   ion-content {
-    --padding-bottom: 80px;
+    --padding-bottom: var(--persistent-chrome-pad, 80px);
   }
   
   /* Para páginas que usan IonPage directamente */
   ion-page {
-    padding-bottom: 80px;
+    padding-bottom: var(--persistent-chrome-pad, 80px);
   }
   
   /* Asegurar que el footbar no interfiera con el contenido */

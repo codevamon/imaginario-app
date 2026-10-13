@@ -5,6 +5,10 @@ import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { listInterviews, type Interview } from '../../../core/db/dao/interviews';
 import { audioManager } from '../../../core/audio/player';
+import {
+  buildInterviewsQueue,
+  shouldSkipSetQueue,
+} from '../../../core/audio/buildAudioQueue';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
@@ -158,7 +162,23 @@ const DiscoverInterviewsWidget: React.FC<Props> = ({
   }, []);
 
   const handlePlayInterview = (interviewId: string, url: string) => {
-    audioManager.toggle(interviewId, url);
+    const interview = interviews.find((i) => i.id === interviewId);
+    const queue = buildInterviewsQueue(interviews);
+    if (
+      queue.length > 0 &&
+      !shouldSkipSetQueue(
+        audioManager.getSessionSnapshot(),
+        interviewId,
+        queue,
+        audioManager.getQueue()
+      )
+    ) {
+      audioManager.setQueue(queue, interviewId);
+    }
+    audioManager.toggle(interviewId, url, {
+      title: interview?.title || 'Entrevista',
+      artist: 'Imaginario',
+    });
   };
 
   if (loading) {

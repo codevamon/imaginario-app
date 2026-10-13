@@ -3,6 +3,10 @@ import React from "react";
 import { IonIcon, IonSpinner } from "@ionic/react";
 import { play, pause } from "ionicons/icons";
 import { audioManager } from "@/core/audio/player";
+import {
+  buildInterviewsQueue,
+  shouldSkipSetQueue,
+} from "@/core/audio/buildAudioQueue";
 import { useAudioLoading } from "@/core/audio/useAudioLoading";
 import { useAudioRepairing } from "@/core/audio/useAudioRepairing";
 import { useAudioProgress } from "@/core/audio/useAudioProgress";
@@ -28,6 +32,20 @@ const InterviewsWidget: React.FC<Props> = ({ items, title = "", onBeforePlay }) 
     const resolved = url || item?.audio_url;
     if (!resolved) return;
     onBeforePlay?.(id);
+    if (!onBeforePlay) {
+      const queue = buildInterviewsQueue(items);
+      if (
+        queue.length > 0 &&
+        !shouldSkipSetQueue(
+          audioManager.getSessionSnapshot(),
+          id,
+          queue,
+          audioManager.getQueue()
+        )
+      ) {
+        audioManager.setQueue(queue, id);
+      }
+    }
     audioManager.toggle(id, resolved);
   };
 

@@ -72,23 +72,14 @@ async function handleNativeMediaPlay(): Promise<void> {
     return;
   }
 
-  if (audio?.src && audio.paused && !audio.ended) {
-    try {
-      await audio.play();
-      const lastId = (audioManager as any).lastPlayId as string | null;
-      if (lastId) {
-        (audioManager as any).setPlaying(lastId);
-      }
-      void nativeSetPlaybackState('playing');
-      return;
-    } catch (e) {
-      console.warn('[AudioManager][NativeBridge] nativeMediaPlay resume failed:', e);
-    }
+  if (await audioManager.resume()) {
+    return;
   }
 
-  const lastId = (audioManager as any).lastPlayId as string | null;
+  const snapshot = audioManager.getSessionSnapshot();
+  const lastId = snapshot.currentId;
   const lastSrc = (audioManager as any).lastPlaySrc as string | null;
-  const meta = (audioManager as any).currentMetadata as AudioPlayMetadata | null;
+  const meta = snapshot.metadata;
   if (lastId && lastSrc) {
     await audioManager.play(lastId, lastSrc, meta ?? undefined);
     return;
@@ -113,30 +104,7 @@ function handleNativeMediaStop(): void {
 
 function handleNativeMediaSeekTo(position: number): void {
   console.log('[AudioManager][NativeBridge] nativeMediaSeekTo');
-
-  if (!Number.isFinite(position)) {
-    console.log('[AudioManager][NativeBridge] nativeMediaSeekTo skipped: invalid position');
-    return;
-  }
-
-  const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
-  if (!audio || !audio.src) {
-    console.log('[AudioManager][NativeBridge] nativeMediaSeekTo skipped: no active audio');
-    return;
-  }
-
-  const duration = audio.duration;
-  if (!Number.isFinite(duration) || duration <= 0) {
-    console.log('[AudioManager][NativeBridge] nativeMediaSeekTo skipped: duration not ready');
-    return;
-  }
-
-  const target = Math.max(0, Math.min(position, duration));
-  audio.currentTime = target;
-  (audioManager as any).setProgress?.(target);
-  lastNativePositionSyncAt = 0;
-  void nativeSetPosition(target, duration, audio.paused ? 0 : 1);
-  console.log(`[AudioManager] seeked from native controls: ${target}s`);
+  audioManager.seekTo(position);
 }
 
 async function handleNativeMediaPrevious(): Promise<void> {
@@ -304,10 +272,30 @@ export type AudioQueueItem = {
   metadata?: AudioPlayMetadata;
 };
 
+/** Estado de sesión para UI global (no reemplaza getPlayingId/onChange). */
+export type AudioSessionStatus =
+  | 'idle'
+  | 'loading'
+  | 'playing'
+  | 'paused'
+  | 'ended'
+  | 'error';
+
+export type AudioSessionSnapshot = {
+  status: AudioSessionStatus;
+  currentId: string | null;
+  metadata: AudioPlayMetadata | null;
+  currentTime: number;
+  duration: number;
+  queueIndex: number;
+  queueLength: number;
+};
+
 type OnChangeCb = (playingId: string | null) => void;
 type OnProgressCb = (currentTime: number, duration: number, progress: number) => void;
 type OnLoadingCb = (loadingId: string | null) => void;
 type OnRepairingCb = (repairingId: string | null) => void;
+type OnSessionChangeCb = (snapshot: AudioSessionSnapshot) => void;
 
 interface ProgressData {
   currentTime: number;
@@ -637,6 +625,10 @@ class AudioManager {
   private lastPlaySrc: string | null = null;
   private queue: AudioQueueItem[] = [];
   private queueIndex = -1;
+  private sessionStatus: AudioSessionStatus = 'idle';
+  private sessionCbs: OnSessionChangeCb[] = [];
+  /** Invalida play() async en curso cuando se cierra la sesión o arranca otra pista. */
+  private playToken = 0;
 
   private startProgressLoop() {
     if (this.animationFrameId) {
@@ -937,6 +929,20 @@ class AudioManager {
       return;
     }
 
+    // Misma pista en pausa: reanudar sin re-preparar fuente ni reiniciar currentTime
+    if (this.canResumeSameTrack(id)) {
+      setupMediaSession();
+      if (metadata) {
+        this.currentMetadata = metadata;
+      }
+      this.lastPlayId = id;
+      this.lastPlaySrc = src;
+      const resumed = await this.resume();
+      if (resumed) return;
+    }
+
+    const token = ++this.playToken;
+
     setupMediaSession();
     this.lastPlayId = id;
     this.lastPlaySrc = src;
@@ -956,11 +962,18 @@ class AudioManager {
     // Preparar fuente: prioriza caché local, descarga en background si hay conexión
     const originalSrc = src;
     src = await prepareSource(originalSrc, id);
+
+    if (!this.isPlayTokenCurrent(token)) {
+      console.log('[AudioManager] play aborted after prepareSource (stale token)');
+      return;
+    }
     
     // Si prepareSource retornó la URL original pero no hay conexión y no hay archivo local,
     // ya se mostró el toast, así que retornamos
     if (!src || (src === originalSrc && !src.startsWith('file://') && !src.startsWith('http'))) {
       this.setLoading(null);
+      this.sessionStatus = 'error';
+      this.notifySession();
       return;
     }
 
@@ -990,10 +1003,19 @@ class AudioManager {
 
         // Usar función robusta para obtener URL segura
         src = await getSafeAudioUrl(relativePath);
+        if (!this.isPlayTokenCurrent(token)) {
+          console.log('[AudioManager] play aborted after getSafeAudioUrl (stale token)');
+          return;
+        }
         console.log('[DebugAudioPlayer] URL final:', src);
       } catch (err) {
         console.error('[AudioManager] ❌ Error al obtener URL segura para audio local:', err);
       }
+    }
+
+    if (!this.isPlayTokenCurrent(token)) {
+      console.log('[AudioManager] play aborted before normalize (stale token)');
+      return;
     }
 
     const normalizedSrc = this.normalizeSrc(src);
@@ -1026,9 +1048,14 @@ class AudioManager {
 
     // Verificar que la URL existe antes de intentar reproducir
     const urlExists = await this.checkUrlExists(normalizedSrc);
+    if (!this.isPlayTokenCurrent(token)) {
+      console.log('[AudioManager] play aborted after URL check (stale token)');
+      return;
+    }
     if (!urlExists) {
       console.warn('[AudioManager] URL not found (404):', normalizedSrc);
-      this.setPlaying(null, { endOfTrack: true });
+      this.setLoading(null);
+      this.setPlaying(null, { error: true });
       return;
     }
 
@@ -1123,6 +1150,7 @@ class AudioManager {
           this.progressTimer = null;
         }
         setMediaSessionPaused();
+        this.sessionStatus = 'paused';
         this.setPlaying(null);
         console.log('[AudioManager] paused NativeAudio track:', id);
       } else if (this.audio && !this.audio.paused) {
@@ -1137,60 +1165,20 @@ class AudioManager {
         setMediaSessionPaused();
         void nativeSetPlaybackState('paused');
         void nativeSetPosition(currentTime, duration > 0 ? duration : undefined, 0);
+        this.sessionStatus = 'paused';
         this.setPlaying(null);
         console.log('[AudioManager] paused current track:', id);
       } else if (this.audio) {
-        try {
-          await this.audio.play();
-          console.log('[AudioManager] ▶️ Reproducción iniciada correctamente (resume)');
-          // Registrar cuándo comenzó esta reproducción (para proteger los primeros ms)
-          lastPlaybackStartedAt = Date.now();
-          this.setPlaying(id);
-          void nativeSetMetadata(id, this.currentMetadata ?? undefined, this.audio?.duration);
-          void nativeSetPlaybackState('playing');
-          console.log('[AudioManager] resumed track:', id);
-        } catch (err: any) {
-          console.warn('[AudioManager] ⚠️ Error de reproducción (resume):', err);
-          
-          // Detectar error DOMException típico de archivo corrupto
-          if (err.name === 'DOMException' || String(err).includes('DOMException')) {
-            console.warn('[AudioManager] Archivo posiblemente dañado en resume, iniciando verificación...');
-            
-            // Eliminar archivo corrupto si es local
-            if (this.audio?.src?.includes('_capacitor_file_') || this.audio?.src?.startsWith('capacitor://localhost/_capacitor_file_') || this.audio?.src?.startsWith('https://localhost/_capacitor_file_')) {
-              try {
-                let decodedPath = this.audio.src.replace('file://', '').replace('capacitor://localhost/_capacitor_file_', '').replace(/^https?:\/\/localhost\/_capacitor_file_/, '');
-                decodedPath = decodeURIComponent(decodedPath);
-                const relativePath = decodedPath.indexOf('imaginario/') !== -1 
-                  ? decodedPath.substring(decodedPath.indexOf('imaginario/'))
-                  : `imaginario/audio/${decodedPath.split('/').pop() || ''}`;
-                
-                audioPersistenceDebug('delete requested', {
-                  path: relativePath,
-                  reason: 'resume-domexception',
-                  size: null,
-                  caller: 'AudioManager.resume',
-                });
-                await Filesystem.deleteFile({
-                  path: relativePath,
-                  directory: Directory.Data,
-                });
-                console.warn('[AudioManager] 🧹 Archivo corrupto eliminado en resume:', relativePath);
-              } catch (delErr) {
-                console.warn('[AudioManager] No se pudo eliminar archivo corrupto en resume:', delErr);
-              }
-            }
-            
-            // Para resume, necesitamos obtener la URL original del track actual
-            // Como no tenemos acceso directo a originalSrc aquí, solo logueamos el error
-            console.warn('[AudioManager] ⚠️ No se puede reparar automáticamente en resume sin URL original');
-            this.setPlaying(null, { endOfTrack: true });
-          } else {
-            console.error('[AudioManager] Reproducción falló por otra causa (resume):', err);
-            this.setPlaying(null, { endOfTrack: true });
-          }
+        const resumed = await this.resume();
+        if (!resumed) {
+          this.setPlaying(null, { error: true });
         }
       }
+      return;
+    }
+
+    if (!this.isPlayTokenCurrent(token)) {
+      console.log('[AudioManager] play aborted before loading element (stale token)');
       return;
     }
 
@@ -1246,6 +1234,11 @@ class AudioManager {
           directory: Directory.Data,
         });
 
+        if (!this.isPlayTokenCurrent(token)) {
+          console.log('[AudioManager] corrupt check aborted after stat (stale token)');
+          return;
+        }
+
         if (stat.size < 10240) { // menos de 10 KB = posible corrupción
           console.warn(`[AudioManager] ⚠️ Archivo corrupto detectado (${stat.size} bytes). Eliminando:`, relativePath);
           audioPersistenceDebug('delete requested', {
@@ -1258,13 +1251,21 @@ class AudioManager {
             path: relativePath,
             directory: Directory.Data,
           });
+          if (!this.isPlayTokenCurrent(token)) {
+            console.log('[AudioManager] corrupt check aborted after delete (stale token)');
+            return;
+          }
           throw new Error('Archivo corrupto eliminado antes de reproducir');
         }
       } catch (verErr) {
         if (verErr instanceof Error && verErr.message === 'Archivo corrupto eliminado antes de reproducir') {
+          if (!this.isPlayTokenCurrent(token)) {
+            console.log('[AudioManager] corrupt check error ignored (stale token)');
+            return;
+          }
           // Archivo corrupto eliminado, continuar sin reproducir
           this.setLoading(null);
-          this.setPlaying(null, { endOfTrack: true });
+          this.setPlaying(null, { error: true });
           return;
         }
         console.warn('[AudioManager] Verificación de archivo local falló:', verErr);
@@ -1280,6 +1281,10 @@ class AudioManager {
     
     // Configurar eventos para HTMLAudioElement
     this.audio.onloadedmetadata = () => {
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] onloadedmetadata ignored (stale token)');
+        return;
+      }
       const duration = this.audio?.duration || 0;
       this.setDuration(duration);
       this.setProgress(0);
@@ -1292,6 +1297,10 @@ class AudioManager {
     };
     
     this.audio.onended = async () => {
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] onended ignored (stale token)');
+        return;
+      }
       const endedAudio = this.audio;
       const endedId = this.playingId;
       console.log('[AudioManager] track ended:', endedId);
@@ -1307,6 +1316,8 @@ class AudioManager {
         console.log(`[AudioManager] track ended; attempting next after: ${endedId}`);
         const advanced = await this.playNext();
 
+        // playNext incrementa playToken legítimamente: no comparar con el token de esta pista.
+        // Solo salir si otra reproducción ya posee la sesión.
         if (
           this.playingId !== null &&
           this.playingId !== endedId
@@ -1341,12 +1352,25 @@ class AudioManager {
         return;
       }
 
+      // Evita ended sobre idle (stopAndClearSession) u otra pista (auto-next/manual).
+      // No usa playToken aquí: auto-next lo incrementa de forma válida.
+      if (!this.canApplyEndedFromTrack(endedId)) {
+        console.log(
+          '[AudioManager] track ended handler lost session ownership; skip ended'
+        );
+        return;
+      }
+
       void nativeSetPlaybackState('stopped');
       scheduleDelayedNativeClear();
       this.setPlaying(null, { endOfTrack: true });
     };
     
     this.audio.onerror = async (e) => {
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] onerror ignored (stale token)');
+        return;
+      }
       console.warn('[AudioManager] audio error:', e, 'for src:', normalizedSrc);
 
       const audioSrc = this.audio?.src ?? '';
@@ -1384,6 +1408,11 @@ class AudioManager {
                 directory: Directory.Data,
               }).catch(() => null);
 
+              if (!this.isPlayTokenCurrent(token)) {
+                console.log('[AudioManager] onerror FS work ignored after stat (stale token)');
+                return;
+              }
+
               if (stat && (stat.size ?? 0) < 10240) {
                 audioPersistenceDebug('delete requested', {
                   path: relativePath,
@@ -1395,6 +1424,10 @@ class AudioManager {
                   path: relativePath,
                   directory: Directory.Data,
                 });
+                if (!this.isPlayTokenCurrent(token)) {
+                  console.log('[AudioManager] onerror FS work ignored after delete (stale token)');
+                  return;
+                }
                 deletedCorruptFile = true;
                 console.warn('[AudioManager] 🧹 Archivo local eliminado por corrupción (<10KB):', relativePath);
               }
@@ -1409,6 +1442,11 @@ class AudioManager {
         }
       }
 
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] onerror state mutation skipped (stale token)');
+        return;
+      }
+
       if (this.progressTimer) {
         clearInterval(this.progressTimer);
         this.progressTimer = null;
@@ -1416,7 +1454,7 @@ class AudioManager {
       this.stopProgressLoop();
       void nativeSetPlaybackState('stopped');
       void nativeClear();
-      this.setPlaying(null, { endOfTrack: true });
+      this.setPlaying(null, { error: true });
       this.setLoading(null); // Limpiar loading en caso de error
     };
 
@@ -1426,6 +1464,10 @@ class AudioManager {
     // Esperar a que el audio esté listo (canplaythrough) para evitar DOMException en Android WebView
     try {
       await this.waitForAudioReady(this.audio);
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] play aborted after waitForAudioReady (stale token)');
+        return;
+      }
       const playPromise = this.audio.play();
       if (playPromise !== undefined) {
         try {
@@ -1434,12 +1476,20 @@ class AudioManager {
           // Si es un error simple de reproducción, hacer reintento rápido
           if (!(err instanceof DOMException)) {
             console.warn('[AudioManager] Reintento de reproducción fallida:', err);
-            setTimeout(() => this.audio?.play().catch(() => {}), 300);
+            setTimeout(() => {
+              if (!this.isPlayTokenCurrent(token)) return;
+              this.audio?.play().catch(() => {});
+            }, 300);
             return;
           }
           // Si es DOMException, propagar al catch externo para reparación
           throw err;
         }
+      }
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] play aborted after audio.play (stale token)');
+        try { this.audio?.pause(); } catch { /* ignore */ }
+        return;
       }
       console.log('[AudioManager] ▶️ Reproducción iniciada correctamente');
       // Registrar cuándo comenzó esta reproducción (para proteger los primeros ms)
@@ -1450,6 +1500,10 @@ class AudioManager {
       this.setLoading(null); // Finalizar loading cuando comienza a reproducir
       console.log('[AudioManager] playing track:', id, 'from:', normalizedSrc);
     } catch (err: any) {
+      if (!this.isPlayTokenCurrent(token)) {
+        console.log('[AudioManager] play error ignored (stale token)');
+        return;
+      }
       console.warn('[AudioManager] ⚠️ Error de reproducción:', err);
 
       // Detectar error DOMException típico de archivo corrupto
@@ -1483,6 +1537,7 @@ class AudioManager {
           }
           
           const networkStatus = await Network.getStatus();
+          if (!this.isPlayTokenCurrent(token)) return;
           if (networkStatus.connected) {
             console.log('[AudioManager] 🌐 En línea, re-descargando archivo...');
             this.setRepairing(id); // Indicar que se está reparando
@@ -1491,20 +1546,41 @@ class AudioManager {
             const downloadUrl = originalSrc;
             const hash = await getAudioHash(downloadUrl);
             await reDownloadAudio(downloadUrl, hash);
+            if (!this.isPlayTokenCurrent(token)) {
+              this.setRepairing(null);
+              return;
+            }
             console.log('[AudioManager] ✅ Re-descarga completada, reintentando reproducción...');
             
             // Obtener nueva URL segura después de la re-descarga
             const newPath = await getSafeAudioUrl(`imaginario/audio/${hash}.mp3`);
+            if (!this.isPlayTokenCurrent(token)) {
+              this.setRepairing(null);
+              return;
+            }
             const finalNewPath = newPath.startsWith('http') ? newPath : Capacitor.convertFileSrc(newPath);
             this.audio.src = finalNewPath;
             this.audio.load();
             
             // Esperar un momento antes de reintentar
             await new Promise((r) => setTimeout(r, 500));
+            if (!this.isPlayTokenCurrent(token)) {
+              this.setRepairing(null);
+              return;
+            }
             
             // Esperar a que el audio esté listo nuevamente
             await this.waitForAudioReady(this.audio);
+            if (!this.isPlayTokenCurrent(token)) {
+              this.setRepairing(null);
+              return;
+            }
             await this.audio.play();
+            if (!this.isPlayTokenCurrent(token)) {
+              try { this.audio?.pause(); } catch { /* ignore */ }
+              this.setRepairing(null);
+              return;
+            }
             
             console.log('[AudioManager] ✅ Reproducción exitosa tras reparación');
             
@@ -1519,19 +1595,21 @@ class AudioManager {
           } else {
             console.warn('[AudioManager] ❌ Sin conexión, no se puede reparar archivo corrupto');
             this.setRepairing(null);
-            this.setPlaying(null, { endOfTrack: true });
+            this.setPlaying(null, { error: true });
             this.setLoading(null);
           }
         } catch (repairErr) {
+          if (!this.isPlayTokenCurrent(token)) return;
           console.error('[AudioManager] 🚫 Fallo en la reparación automática:', repairErr);
           this.setRepairing(null);
-          this.setPlaying(null, { endOfTrack: true });
+          this.setPlaying(null, { error: true });
           this.setLoading(null);
         }
       } else {
         // Si el error no es DOMException, puede ser de waitForAudioReady
         console.warn('[AudioManager] Audio aún no listo, reintentando...', err);
         setTimeout(() => {
+          if (!this.isPlayTokenCurrent(token)) return;
           this.audio?.play().catch(() => {});
         }, 500);
       }
@@ -1547,6 +1625,7 @@ class AudioManager {
       });
       this.capgoPaused = true;
       setMediaSessionPaused();
+      this.sessionStatus = 'paused';
       this.setPlaying(null);
       console.log('[AudioManager] paused Capgo');
       return;
@@ -1561,6 +1640,7 @@ class AudioManager {
         }
         // Intentar pausar NativeAudio si tiene ese método
         // NativeAudio no tiene pause nativo, así que solo detenemos el progreso
+        this.sessionStatus = 'paused';
         this.setPlaying(null);
         console.log('[AudioManager] paused NativeAudio');
       } catch (e) {
@@ -1569,7 +1649,13 @@ class AudioManager {
       return;
     }
     
-    if (!this.audio) return;
+    if (!this.audio) {
+      if (this.lastPlayId) {
+        this.sessionStatus = 'paused';
+        this.setPlaying(null);
+      }
+      return;
+    }
     try {
       const currentTime = this.audio.currentTime || 0;
       const duration = this.audio.duration || 0;
@@ -1581,11 +1667,235 @@ class AudioManager {
       this.stopProgressLoop();
       void nativeSetPlaybackState('paused');
       void nativeSetPosition(currentTime, duration > 0 ? duration : undefined, 0);
+      // Conserva lastPlayId / lastPlaySrc / metadata / posición en el elemento
+      this.sessionStatus = 'paused';
       this.setPlaying(null);
       console.log('[AudioManager] paused');
     } catch (e) {
       console.warn('[AudioManager] pause failed:', e);
     }
+  }
+
+  /**
+   * Reanuda la sesión pausada sobre el HTMLAudioElement existente,
+   * sin re-descargar ni reiniciar currentTime.
+   */
+  async resume(): Promise<boolean> {
+    if (USE_CAPGO_NATIVE_AUDIO && this.capgoPaused && this.lastCapgoAssetId) {
+      return this.resumeCapgoTrack(this.lastCapgoAssetId);
+    }
+
+    if (!this.lastPlayId || !this.audio?.src) {
+      console.log('[AudioManager] resume skipped: no paused session');
+      return false;
+    }
+
+    if (!this.audio.paused && !this.audio.ended) {
+      this.sessionStatus = 'playing';
+      this.setPlaying(this.lastPlayId);
+      return true;
+    }
+
+    if (this.audio.ended) {
+      console.log('[AudioManager] resume skipped: track already ended');
+      return false;
+    }
+
+    try {
+      await this.audio.play();
+      lastPlaybackStartedAt = Date.now();
+      this.sessionStatus = 'playing';
+      this.setPlaying(this.lastPlayId);
+      void nativeSetMetadata(
+        this.lastPlayId,
+        this.currentMetadata ?? undefined,
+        this.audio.duration
+      );
+      void nativeSetPlaybackState('playing');
+      const duration = this.audio.duration || 0;
+      void nativeSetPosition(
+        this.audio.currentTime || 0,
+        duration > 0 ? duration : undefined,
+        1
+      );
+      console.log('[AudioManager] resumed session:', this.lastPlayId);
+      return true;
+    } catch (e) {
+      console.warn('[AudioManager] resume failed:', e);
+      this.sessionStatus = 'error';
+      this.notifySession();
+      return false;
+    }
+  }
+
+  seekTo(seconds: number): boolean {
+    if (!Number.isFinite(seconds)) {
+      console.log('[AudioManager] seekTo skipped: invalid position');
+      return false;
+    }
+
+    if (!this.audio || !this.audio.src) {
+      console.log('[AudioManager] seekTo skipped: no active audio');
+      return false;
+    }
+
+    const duration = this.audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      console.log('[AudioManager] seekTo skipped: duration not ready');
+      return false;
+    }
+
+    const target = Math.max(0, Math.min(seconds, duration));
+    const wasPaused = this.audio.paused;
+    this.audio.currentTime = target;
+    this.setProgress(target);
+    lastNativePositionSyncAt = 0;
+    void nativeSetPosition(target, duration, wasPaused ? 0 : 1);
+    // Mantener paused/playing/ended; solo refrescar snapshot (currentTime)
+    this.notifySession();
+    console.log(`[AudioManager] seekTo: ${target}s`);
+    return true;
+  }
+
+  seekBy(deltaSeconds: number): boolean {
+    if (!Number.isFinite(deltaSeconds)) {
+      console.log('[AudioManager] seekBy skipped: invalid delta');
+      return false;
+    }
+    return this.seekTo(this.getCurrentTime() + deltaSeconds);
+  }
+
+  /**
+   * Cierre explícito de sesión (p. ej. dismiss del widget).
+   * No borra archivos de caché offline.
+   */
+  stopAndClearSession(): void {
+    this.playToken += 1;
+
+    if (this.progressTimer) {
+      clearInterval(this.progressTimer);
+      this.progressTimer = null;
+    }
+    this.stopProgressLoop();
+
+    if (this.isUsingCapgoNative && this.playingId) {
+      const assetId = this.playingId;
+      void CapgoNativeAudio.stop({ assetId }).catch(() => {});
+      void CapgoNativeAudio.unload({ assetId }).catch(() => {});
+      void this.cleanupCapgoListeners();
+      this.isUsingCapgoNative = false;
+      this.capgoPaused = false;
+    }
+
+    if (this.audio) {
+      try {
+        this.audio.pause();
+        this.audio.removeAttribute('src');
+        this.audio.src = '';
+        this.audio.load();
+      } catch (e) {
+        console.warn('[AudioManager] stopAndClearSession audio cleanup failed:', e);
+      }
+    }
+
+    this.loadingId = null;
+    this.repairingId = null;
+    this.playingId = null;
+    this.lastPlayId = null;
+    this.lastPlaySrc = null;
+    this.currentMetadata = null;
+    this.isUsingNativeAudio = false;
+    this.clearQueue();
+    this.sessionStatus = 'idle';
+
+    clearMediaSession();
+    void nativeClear();
+
+    this.loadingCbs.forEach((cb) => {
+      try { cb(null); } catch (e) {
+        console.warn('[AudioManager] onLoading callback failed:', e);
+      }
+    });
+    this.repairingCbs.forEach((cb) => {
+      try { cb(null); } catch (e) {
+        console.warn('[AudioManager] onRepairing callback failed:', e);
+      }
+    });
+    this.cbs.forEach((cb) => {
+      try { cb(null); } catch (e) {
+        console.warn('[AudioManager] onChange callback failed:', e);
+      }
+    });
+    this.notifySession();
+    console.log('[AudioManager] session cleared');
+  }
+
+  getSessionSnapshot(): AudioSessionSnapshot {
+    return {
+      status: this.sessionStatus,
+      currentId: this.lastPlayId,
+      metadata: this.currentMetadata
+        ? { ...this.currentMetadata }
+        : null,
+      currentTime: this.getCurrentTime(),
+      duration: this.getDuration(),
+      queueIndex: this.resolveQueueIndex(),
+      queueLength: this.queue.length,
+    };
+  }
+
+  onSessionChange(cb: OnSessionChangeCb) {
+    this.sessionCbs.push(cb);
+    return () => {
+      this.sessionCbs = this.sessionCbs.filter((x) => x !== cb);
+    };
+  }
+
+  private notifySession() {
+    const snapshot = this.getSessionSnapshot();
+    this.sessionCbs.forEach((cb) => {
+      try { cb(snapshot); } catch (e) {
+        console.warn('[AudioManager] onSessionChange callback failed:', e);
+      }
+    });
+  }
+
+  private isPlayTokenCurrent(token: number): boolean {
+    return token === this.playToken;
+  }
+
+  /**
+   * ¿Puede este onended publicar `ended` sin pisar idle / otra pista?
+   * No usa playToken: auto-next lo incrementa de forma legítima.
+   */
+  private canApplyEndedFromTrack(endedId: string | null): boolean {
+    if (this.sessionStatus === 'idle') {
+      return false;
+    }
+    if (this.playingId !== null && this.playingId !== endedId) {
+      return false;
+    }
+    if (this.loadingId !== null && this.loadingId !== endedId) {
+      return false;
+    }
+    if (
+      this.lastPlayId !== null &&
+      endedId !== null &&
+      this.lastPlayId !== endedId
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  private canResumeSameTrack(id: string): boolean {
+    return (
+      this.sessionStatus === 'paused' &&
+      this.lastPlayId === id &&
+      !!this.audio?.src &&
+      !!this.audio.paused &&
+      !this.audio.ended
+    );
   }
 
   toggle(id: string, src?: string, metadata?: AudioPlayMetadata) {
@@ -1599,6 +1909,11 @@ class AudioManager {
     }
     if (this.playingId === id) {
       this.pause();
+    } else if (this.canResumeSameTrack(id)) {
+      if (metadata) {
+        this.currentMetadata = metadata;
+      }
+      void this.resume();
     } else {
       void this.play(id, src, metadata);
     }
@@ -1750,31 +2065,46 @@ class AudioManager {
     return duration > 0 ? (currentTime / duration) * 100 : 0;
   }
 
-  private setPlaying(id: string | null, options?: { endOfTrack?: boolean }) {
+  private setPlaying(
+    id: string | null,
+    options?: { endOfTrack?: boolean; error?: boolean }
+  ) {
     this.playingId = id;
     if (id) {
       const idx = this.queue.findIndex((item) => item.id === id);
       if (idx >= 0) {
         this.queueIndex = idx;
       }
+      this.sessionStatus = 'playing';
       updateMediaSession(this.currentMetadata ?? undefined);
+    } else if (options?.error) {
+      // Conserva lastPlayId/metadata para UI; no es idle
+      this.sessionStatus = 'error';
     } else if (options?.endOfTrack) {
+      // Última pista terminada: conserva metadatos; limpia controles del sistema (V2)
       clearMediaSession();
+      this.sessionStatus = 'ended';
     }
+    // pause() asigna sessionStatus = 'paused' antes de llamar setPlaying(null)
     this.cbs.forEach(cb => {
       try { cb(this.playingId); } catch (e) {
         console.warn('[AudioManager] onChange callback failed:', e);
       }
     });
+    this.notifySession();
   }
 
   private setLoading(id: string | null) {
     this.loadingId = id;
+    if (id !== null) {
+      this.sessionStatus = 'loading';
+    }
     this.loadingCbs.forEach(cb => {
       try { cb(this.loadingId); } catch (e) {
         console.warn('[AudioManager] onLoading callback failed:', e);
       }
     });
+    this.notifySession();
   }
 
   private setRepairing(id: string | null) {
@@ -1869,27 +2199,18 @@ function setupMediaSession() {
 
     ms.setActionHandler('play', () => {
       void (async () => {
-        const audio = (window as any).__IMAGINARIO_AUDIO__ as HTMLAudioElement | undefined;
-        if (audio?.src && audio.paused) {
-          try {
-            await audio.play();
-            const lastId = (audioManager as any).lastPlayId as string | null;
-            if (lastId) {
-              (audioManager as any).setPlaying(lastId);
-            } else {
-              (navigator.mediaSession as any).playbackState = 'playing';
-            }
-          } catch (e) {
-            console.warn('[AudioManager] mediaSession play handler failed:', e);
-          }
+        if (await audioManager.resume()) {
           return;
         }
 
-        const lastId = (audioManager as any).lastPlayId as string | null;
+        const snapshot = audioManager.getSessionSnapshot();
         const lastSrc = (audioManager as any).lastPlaySrc as string | null;
-        const meta = (audioManager as any).currentMetadata as AudioPlayMetadata | null;
-        if (lastId && lastSrc) {
-          await audioManager.play(lastId, lastSrc, meta ?? undefined);
+        if (snapshot.currentId && lastSrc) {
+          await audioManager.play(
+            snapshot.currentId,
+            lastSrc,
+            snapshot.metadata ?? undefined
+          );
         }
       })();
     });
@@ -1900,7 +2221,8 @@ function setupMediaSession() {
   }
 }
 
-// 🧭 Pausar audio automáticamente en cambios de página o visibilidad
+// 🧭 Autopause por ciclo de vida (visibility / unload / App.pause).
+// La navegación interna ya no pausa (continuidad V3).
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const pauseIfPlaying = () => {
     try {
@@ -1990,55 +2312,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     console.warn('[AudioManager] No se pudo registrar App.pause:', err);
   }
 
-  // 🚦 Pausar audio al cambiar de ruta o módulo
-  try {
-    // Inicializar lastPathname
-    audioManager.lastPathname = window.location.pathname;
-
-    // Cuando cambia la ruta interna de Ionic / React Router
-    window.addEventListener('ionRouteWillChange', () => {
-      const prevPath = audioManager.lastPathname;
-      const currentPath = window.location.pathname;
-      audioManager.lastPathname = currentPath;
-      if (prevPath !== currentPath) {
-        pauseIfPlaying();
-        resetAutoPauseFlag();
-      }
-    });
-
-    // También cubrir navegación directa por React Router (push, back, forward)
-    window.addEventListener('popstate', () => {
-      const prevPath = audioManager.lastPathname;
-      const currentPath = window.location.pathname;
-      audioManager.lastPathname = currentPath;
-      if (prevPath !== currentPath) {
-        pauseIfPlaying();
-        resetAutoPauseFlag();
-      }
-    });
-
-    // Monitor global de cambios de URL con MutationObserver (fallback en caso de router.push interno)
-    const observer = new MutationObserver(() => {
-      const currentPath = window.location.pathname;
-      if (currentPath === audioManager.lastPathname) return;
-
-      audioManager.lastPathname = currentPath;
-      if (audioManager.isCapgoStarting()) {
-        console.log('[AudioManager] ⏸️ Ignorando MutationObserver: Capgo iniciando');
-        return;
-      }
-      if (!allowAutoPause) {
-        console.log("[AudioManager] ⏸️ Ignorando cambio DOM inicial (primer tap safe)");
-        return;
-      }
-      if (audioManager.isPlaying()) {
-        pauseIfPlaying();
-        resetAutoPauseFlag();
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-  } catch (err) {
-    console.warn('[AudioManager] No se pudo registrar listener de cambio de ruta:', err);
-  }
+  // V3: autopause por navegación interna (ionRouteWillChange / popstate / MutationObserver)
+  // eliminado para permitir continuidad de audio entre pantallas.
 }

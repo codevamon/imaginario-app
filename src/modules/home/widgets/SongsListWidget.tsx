@@ -2,7 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { IonList, IonItem, IonLabel, IonIcon, IonSpinner } from '@ionic/react';
 import { play, pause } from 'ionicons/icons';
-import { audioManager } from '../../../core/audio/player';
+import { audioManager, type AudioQueueItem } from '../../../core/audio/player';
+import {
+  buildSingleAudioQueue,
+  shouldSkipSetQueue,
+} from '../../../core/audio/buildAudioQueue';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 
 type TrackLocal = { id: string; title?: string; scientific_name?: string; audio_url?: string; };
@@ -61,7 +65,43 @@ const SongsListWidget: React.FC<{ tracksProp?: TrackLocal[] }> = ({ tracksProp }
   }, []);
 
   const toggle = (t: TrackLocal) => {
-    audioManager.toggle(t.id, t.audio_url);
+    if (!t.audio_url) return;
+    // Lista legacy: cola = ítems visibles con URL (orden actual de `tracks`)
+    let queue: AudioQueueItem[] = tracks
+      .filter((item) => !!item.id && !!item.audio_url)
+      .map((item) => ({
+        id: item.id,
+        src: item.audio_url!,
+        metadata: {
+          title: item.title || 'Sin título',
+          artist: item.scientific_name || 'Imaginario',
+        },
+      }));
+    if (queue.length === 0) {
+      queue = buildSingleAudioQueue({
+        id: t.id,
+        src: t.audio_url,
+        metadata: {
+          title: t.title || 'Sin título',
+          artist: t.scientific_name || 'Imaginario',
+        },
+      });
+    }
+    if (
+      queue.length > 0 &&
+      !shouldSkipSetQueue(
+        audioManager.getSessionSnapshot(),
+        t.id,
+        queue,
+        audioManager.getQueue()
+      )
+    ) {
+      audioManager.setQueue(queue, t.id);
+    }
+    audioManager.toggle(t.id, t.audio_url, {
+      title: t.title || 'Sin título',
+      artist: t.scientific_name || 'Imaginario',
+    });
   };
 
   return (

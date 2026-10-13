@@ -5,6 +5,10 @@ import { IonIcon, IonSpinner } from '@ionic/react';
 import { useIonRouter } from '@ionic/react';
 import type { Track } from '../../../core/db/dao/tracks';
 import { audioManager } from '../../../core/audio/player';
+import {
+  buildTracksQueue,
+  shouldSkipSetQueue,
+} from '../../../core/audio/buildAudioQueue';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
@@ -139,21 +143,18 @@ const TracksWidget: React.FC<Props> = ({
     const track = visibleItems.find((t) => t.id === trackId);
     onBeforePlay?.(trackId);
     if (!onBeforePlay) {
-      const queue = visibleItems
-        .filter((t) => !!t.id && !!t.audio_url)
-        .map((t) => ({
-          id: t.id,
-          src: t.audio_url!,
-          metadata: {
-            title: t.title || 'Sin título',
-            artist:
-              t.interpreters ||
-              t.author ||
-              t.community ||
-              'Imaginario',
-          },
-        }));
-      audioManager.setQueue(queue, trackId);
+      const queue = buildTracksQueue(visibleItems);
+      if (
+        queue.length > 0 &&
+        !shouldSkipSetQueue(
+          audioManager.getSessionSnapshot(),
+          trackId,
+          queue,
+          audioManager.getQueue()
+        )
+      ) {
+        audioManager.setQueue(queue, trackId);
+      }
     }
     audioManager.toggle(trackId, url, {
       title: track?.title || 'Sin título',

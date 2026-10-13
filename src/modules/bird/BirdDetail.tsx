@@ -27,7 +27,8 @@ import {
   buildSingsQueue,
   buildTracksQueue,
   buildInterviewsQueue,
-  combineAudioQueues,
+  buildSingleAudioQueue,
+  shouldSkipSetQueue,
 } from '../../core/audio/buildAudioQueue';
 import { getImagesByBirdId, type BirdImage } from '../../core/db/dao/bird_images';
 import { getSingsByBirdId, type Sing } from '../../core/db/dao/sings';
@@ -79,38 +80,85 @@ const BirdDetail: React.FC = () => {
     setVisibleTracks(items);
   }, []);
 
-  const prepareBirdAudioQueue = useCallback(
-    (currentId: string) => {
-      console.log('[BirdDetail] preparing combined audio queue');
-      console.log('[BirdDetail] visible sings:', visibleSings.length);
-      console.log('[BirdDetail] visible tracks:', visibleTracks.length);
-      console.log('[BirdDetail] interviews:', interviews.length);
-
-      const singsQueue = buildSingsQueue(visibleSings);
-      const tracksQueue = buildTracksQueue(visibleTracks);
-      const interviewsQueue = buildInterviewsQueue(interviews, {
-        artist: bird?.name || 'Imaginario',
-      });
-      const queue = combineAudioQueues(singsQueue, tracksQueue, interviewsQueue);
-
-      console.log(`[BirdDetail] sings queue: ${singsQueue.length}`);
-      console.log(`[BirdDetail] tracks queue: ${tracksQueue.length}`);
-      console.log(`[BirdDetail] interviews queue: ${interviewsQueue.length}`);
-      console.log(`[BirdDetail] combined queue: ${queue.length}`);
-      console.log(`[BirdDetail] current id: ${currentId}`);
-      console.log(
-        `[BirdDetail] queue ids: ${queue.map((item) => item.id).join(', ')}`
-      );
-
+  const setSectionQueueIfNeeded = useCallback(
+    (currentId: string, queue: ReturnType<typeof buildSingsQueue>, label: string) => {
       if (queue.length === 0) {
-        console.log('[BirdDetail] combined queue empty; queue not replaced');
+        console.log(`[BirdDetail] ${label} queue empty; queue not replaced`);
         return;
       }
-
+      if (
+        shouldSkipSetQueue(
+          audioManager.getSessionSnapshot(),
+          currentId,
+          queue,
+          audioManager.getQueue()
+        )
+      ) {
+        return;
+      }
+      console.log(
+        `[BirdDetail] ${label} queue: ${queue.length} items, current: ${currentId}`
+      );
       audioManager.setQueue(queue, currentId);
     },
-    [visibleSings, visibleTracks, interviews, bird?.name]
+    []
   );
+
+  const prepareSingsQueue = useCallback(
+    (currentId: string) => {
+      setSectionQueueIfNeeded(currentId, buildSingsQueue(visibleSings), 'sings');
+    },
+    [visibleSings, setSectionQueueIfNeeded]
+  );
+
+  const prepareTracksQueue = useCallback(
+    (currentId: string) => {
+      setSectionQueueIfNeeded(currentId, buildTracksQueue(visibleTracks), 'tracks');
+    },
+    [visibleTracks, setSectionQueueIfNeeded]
+  );
+
+  const prepareInterviewsQueue = useCallback(
+    (currentId: string) => {
+      setSectionQueueIfNeeded(
+        currentId,
+        buildInterviewsQueue(interviews, {
+          artist: bird?.name || 'Imaginario',
+        }),
+        'interviews'
+      );
+    },
+    [interviews, bird?.name, setSectionQueueIfNeeded]
+  );
+
+  const handlePlayTranslation = useCallback(() => {
+    const translation = translations[0];
+    if (!translation?.audio_url) return;
+    const id = `translation-${translation.id}`;
+    const queue = buildSingleAudioQueue({
+      id,
+      src: translation.audio_url,
+      metadata: {
+        title: 'Traducción',
+        artist: bird?.name || 'Imaginario',
+      },
+    });
+    if (
+      queue.length > 0 &&
+      !shouldSkipSetQueue(
+        audioManager.getSessionSnapshot(),
+        id,
+        queue,
+        audioManager.getQueue()
+      )
+    ) {
+      audioManager.setQueue(queue, id);
+    }
+    audioManager.toggle(id, translation.audio_url, {
+      title: 'Traducción',
+      artist: bird?.name || 'Imaginario',
+    });
+  }, [translations, bird?.name]);
 
   // Escuchar cambios del audioManager
   useEffect(() => {
@@ -372,7 +420,7 @@ const BirdDetail: React.FC = () => {
                   {translations[0]?.audio_url && (
                     <div className="bird-translation-button">
                       <IonButton 
-                        onClick={() => audioManager.toggle(`translation-${translations[0].id}`, translations[0].audio_url!)}
+                        onClick={handlePlayTranslation}
                         fill="outline"
                         size="small"
                       >
@@ -394,7 +442,7 @@ const BirdDetail: React.FC = () => {
             <BirdSingsWidget
               items={sings}
               onVisibleItemsChange={handleVisibleSingsChange}
-              onBeforePlay={prepareBirdAudioQueue}
+              onBeforePlay={prepareSingsQueue}
             />
           </AccordionI>
 
@@ -404,7 +452,7 @@ const BirdDetail: React.FC = () => {
             <BirdTracksWidget
               items={tracks}
               onVisibleItemsChange={handleVisibleTracksChange}
-              onBeforePlay={prepareBirdAudioQueue}
+              onBeforePlay={prepareTracksQueue}
             />
           </AccordionI>
 
@@ -413,7 +461,7 @@ const BirdDetail: React.FC = () => {
           <AccordionI title="Entrevistas">
             <BirdInterviewsWidget
               items={interviews}
-              onBeforePlay={prepareBirdAudioQueue}
+              onBeforePlay={prepareInterviewsQueue}
             />
           </AccordionI>
         </div>

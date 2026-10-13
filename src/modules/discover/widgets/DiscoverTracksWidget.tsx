@@ -5,6 +5,10 @@ import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { listTracks, type Track } from '../../../core/db/dao/tracks';
 import { audioManager } from '../../../core/audio/player';
+import {
+  buildTracksQueue,
+  shouldSkipSetQueue,
+} from '../../../core/audio/buildAudioQueue';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
@@ -170,7 +174,27 @@ const DiscoverTracksWidget: React.FC<Props> = ({
   }, []);
 
   const handlePlayTrack = (trackId: string, url: string) => {
-    audioManager.toggle(trackId, url);
+    const track = tracks.find((t) => t.id === trackId);
+    const queue = buildTracksQueue(tracks);
+    if (
+      queue.length > 0 &&
+      !shouldSkipSetQueue(
+        audioManager.getSessionSnapshot(),
+        trackId,
+        queue,
+        audioManager.getQueue()
+      )
+    ) {
+      audioManager.setQueue(queue, trackId);
+    }
+    audioManager.toggle(trackId, url, {
+      title: track?.title || 'Sin título',
+      artist:
+        track?.interpreters ||
+        track?.author ||
+        track?.community ||
+        'Imaginario',
+    });
   };
 
   if (loading) {

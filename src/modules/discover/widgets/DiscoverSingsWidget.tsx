@@ -5,6 +5,10 @@ import { play, pause } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { listSings, type Sing } from '../../../core/db/dao/sings';
 import { audioManager } from '../../../core/audio/player';
+import {
+  buildSingsQueue,
+  shouldSkipSetQueue,
+} from '../../../core/audio/buildAudioQueue';
 import { useAudioProgress } from '../../../core/audio/useAudioProgress';
 import { useAudioLoading } from '../../../core/audio/useAudioLoading';
 import { useAudioRepairing } from '../../../core/audio/useAudioRepairing';
@@ -165,7 +169,27 @@ const DiscoverSingsWidget: React.FC<Props> = ({
   }, []);
 
   const handlePlaySing = (singId: string, url: string) => {
-    audioManager.toggle(singId, url);
+    const sing = sings.find((s) => s.id === singId);
+    const queue = buildSingsQueue(sings);
+    if (
+      queue.length > 0 &&
+      !shouldSkipSetQueue(
+        audioManager.getSessionSnapshot(),
+        singId,
+        queue,
+        audioManager.getQueue()
+      )
+    ) {
+      audioManager.setQueue(queue, singId);
+    }
+    audioManager.toggle(singId, url, {
+      title: sing?.title || 'Canto sin título',
+      artist:
+        sing?.author ||
+        sing?.community ||
+        sing?.interpreters ||
+        'Imaginario',
+    });
   };
 
   if (loading) {
