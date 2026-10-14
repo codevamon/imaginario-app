@@ -65,6 +65,27 @@ public class NativeMediaControlsPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.emitEvent("nativeMediaStop")
             return .success
         }
+
+        // Previous / Next → cola contextual vía AudioManager (JS).
+        // No se gestiona índice ni URLs en Swift.
+        commandCenter.previousTrackCommand.isEnabled = true
+        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+            guard let self = self else { return .commandFailed }
+            self.emitEvent("nativeMediaPrevious")
+            return .success
+        }
+
+        commandCenter.nextTrackCommand.isEnabled = true
+        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+            guard let self = self else { return .commandFailed }
+            self.emitEvent("nativeMediaNext")
+            return .success
+        }
+
+        // Favorecer cambio de pista frente a saltos temporales en la UI nativa.
+        // Los ±15 s del GlobalAudioWidget siguen en JS vía seekBy; no se tocan aquí.
+        commandCenter.skipForwardCommand.isEnabled = false
+        commandCenter.skipBackwardCommand.isEnabled = false
     }
 
     @objc func configure(_ call: CAPPluginCall) {

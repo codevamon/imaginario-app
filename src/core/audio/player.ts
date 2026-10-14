@@ -1278,6 +1278,9 @@ class AudioManager {
     
     // Exponer el elemento global para acceso desde hooks
     (window as any).__IMAGINARIO_AUDIO__ = this.audio;
+
+    // HOTFIX 7.3: reafirmar MediaSession prev/next al emitir `playing` (WebKit/iOS).
+    ensureMediaSessionPlayingHook(this.audio);
     
     // Configurar eventos para HTMLAudioElement
     this.audio.onloadedmetadata = () => {
@@ -1702,6 +1705,7 @@ class AudioManager {
     }
 
     try {
+      ensureMediaSessionPlayingHook(this.audio);
       await this.audio.play();
       lastPlaybackStartedAt = Date.now();
       this.sessionStatus = 'playing';
@@ -2148,6 +2152,75 @@ class AudioManager {
 export const audioManager = new AudioManager();
 
 let mediaSessionSetupDone = false;
+/** HTMLAudioElement al que está enlazado el listener `playing` de MediaSession (máx. uno). */
+let mediaSessionPlayingAudio: HTMLAudioElement | null = null;
+
+/**
+ * HOTFIX 7.3: reafirma nexttrack/previoustrack en MediaSession.
+ * Idempotente: setActionHandler reemplaza el handler anterior (sin acumular).
+ */
+function registerMediaSessionTrackHandlers(source?: string): void {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession as any;
+
+  try {
+    ms.setActionHandler('nexttrack', () => {
+      console.log('[MediaSessionWeb] nexttrack received');
+      if (!audioManager.hasNext()) {
+        console.log('[MediaSessionWeb] nexttrack skipped: no next');
+        return;
+      }
+      void audioManager.playNext();
+    });
+  } catch (e) {
+    console.warn('[MediaSessionWeb] nexttrack unsupported:', e);
+  }
+
+  try {
+    ms.setActionHandler('previoustrack', () => {
+      console.log('[MediaSessionWeb] previoustrack received');
+      if (!audioManager.hasPrevious()) {
+        console.log('[MediaSessionWeb] previoustrack skipped: no previous');
+        return;
+      }
+      void audioManager.playPrevious();
+    });
+  } catch (e) {
+    console.warn('[MediaSessionWeb] previoustrack unsupported:', e);
+  }
+
+  for (const action of ['seekforward', 'seekbackward'] as const) {
+    try {
+      ms.setActionHandler(action, null);
+    } catch (e) {
+      console.warn(`[MediaSessionWeb] ${action} clear unsupported:`, e);
+    }
+  }
+
+  if (source === 'after playing') {
+    console.log('[MediaSessionWeb] handlers registered after playing');
+  }
+}
+
+function onAudioPlayingForMediaSession(): void {
+  registerMediaSessionTrackHandlers('after playing');
+}
+
+/** Un solo listener `playing` sobre el elemento activo; re-enlace si cambia la instancia. */
+function ensureMediaSessionPlayingHook(
+  audio: HTMLAudioElement | null | undefined
+): void {
+  if (!audio) return;
+  if (mediaSessionPlayingAudio === audio) return;
+  if (mediaSessionPlayingAudio) {
+    mediaSessionPlayingAudio.removeEventListener(
+      'playing',
+      onAudioPlayingForMediaSession
+    );
+  }
+  mediaSessionPlayingAudio = audio;
+  audio.addEventListener('playing', onAudioPlayingForMediaSession);
+}
 
 function setMediaSessionPaused() {
   if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
@@ -2214,6 +2287,9 @@ function setupMediaSession() {
         }
       })();
     });
+
+    // HOTFIX 7.2/7.3: prev/next vía MediaSession (reafirmados también en `playing`).
+    registerMediaSessionTrackHandlers('setup');
 
     mediaSessionSetupDone = true;
   } catch (e) {
